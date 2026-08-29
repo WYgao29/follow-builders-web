@@ -371,7 +371,7 @@ function setSync(text) {
 }
 
 /* 已有缓存时的轻量错误提示：不覆盖页面，几秒后自动消失 */
-function showTransientError(msg) {
+function showTransientNote(msg) {
   setSync(msg);
   setTimeout(() => { if (!syncBusy) setSync(null); }, 5000);
 }
@@ -463,6 +463,42 @@ function appendBlogs(section, blogs) {
     }));
     section.appendChild(row);
   }
+}
+
+/* ---------- 批次新鲜度 ----------
+ * 上游每天约北京时间 14:28（06:28 UTC）提交一次快照。
+ * 用本地时钟算出"此刻应该已存在哪一天的批次"，与已加载的最新批次日对比，
+ * 落后了就自动静默刷新——不依赖 cookies，也不需要额外的服务器时间接口。 */
+function expectedBatchDayLocal(now = new Date()) {
+  const snap = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 28, 0, 0));
+  const ref = now >= snap ? snap : new Date(snap.getTime() - 86400000);
+  return dayKey(ref.getTime());
+}
+
+function newestLoadedBatchDay() {
+  let newest = null;
+  const scan = (it) => {
+    const d = it.batchDay || dayKey(it.ms);
+    if (newest === null || d > newest) newest = d;
+  };
+  for (const p of DB.posts.values()) scan(p);
+  for (const e of DB.episodes.values()) scan(e);
+  for (const b of DB.blogs.values()) scan(b);
+  return newest;
+}
+
+let lastBatchCheck = 0;
+async function ensureFreshBatch() {
+  if (!DB.posts.size || syncBusy) return;
+  const expected = expectedBatchDayLocal();
+  const have = newestLoadedBatchDay();
+  const due = have === null || have < expected;                       // 该有新批次了
+  const stale = Date.now() - (Store.data.lastRefresh || 0) > REFRESH_MIN_INTERVAL; // 兜底：超 1 小时
+  if (!due && !stale) return;
+  // 设备时钟偏差可能导致"以为有新批次"反复空拉：批次检查 10 分钟内最多尝试一次
+  if (due && !stale && Date.now() - lastBatchCheck < 10 * 60 * 1000) return;
+  lastBatchCheck = Date.now();
+  await refreshCurrent({ silent: true });
 }
 
 function render() {
@@ -714,16 +750,22 @@ async function refreshCurrent({ silent } = {}) {
   $('#btn-refresh').disabled = true;
   if (!silent) setSync('正在加载最新数据…');
   try {
+    const beforeNewest = newestLoadedBatchDay();
     const added = await fetchAllFeeds(Date.now());
     Store.data.lastRefresh = Date.now();
     DB.persist();
     render();
-    if (!silent || added) setSync(null);
+    const afterNewest = newestLoadedBatchDay();
+    if (afterNewest && afterNewest !== beforeNewest) {
+      showTransientNote(`已更新「${dayTitle(afterNewest)}」的内容`);
+    } else if (!silent || added) {
+      setSync(null);
+    }
   } catch (e) {
     const msg = '刷新失败：' + (e && e.message ? e.message : '网络异常') + '，可尝试切换数据线路';
     if (DB.posts.size) {
       // 已有缓存内容：轻提示即可，不打断阅读
-      showTransientError(msg);
+      showTransientNote(msg);
     } else {
       setSync(null);
       const empty = $('#empty-state');
@@ -969,6 +1011,14 @@ function bind() {
     refreshCurrent();
   });
 
+  // 批次新鲜度：回到前台或每 5 分钟检查一次是否该拉新批次
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') ensureFreshBatch();
+  });
+  setInterval(() => {
+    if (document.visibilityState === 'visible') ensureFreshBatch();
+  }, 5 * 60 * 1000);
+
   // Esc 依次关闭阅读器 / 设置 / 侧边栏
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -1004,12 +1054,11 @@ async function start() {
   render();
   updateBackfillButton();
 
-  const stale = Date.now() - (Store.data.lastRefresh || 0) > REFRESH_MIN_INTERVAL;
   if (!DB.posts.size) {
     await refreshCurrent();
     if (DB.posts.size) await backfill(); // 首次使用：拉历史
-  } else if (stale) {
-    await refreshCurrent({ silent: true });
+  } else {
+    await ensureFreshBatch(); // 上游出了新批次（或超 1 小时）→ 自动静默刷新
   }
   testHook();
 }
