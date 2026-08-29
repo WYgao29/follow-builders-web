@@ -17,7 +17,7 @@
     <button id="btn-menu" class="icon-btn" title="菜单" aria-label="菜单">
       <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
     </button>
-    <h1>造浪者</h1>
+    <h1 id="app-title">造浪者</h1>
     <div class="topbar-actions">
       <button id="btn-refresh" class="icon-btn" title="刷新" aria-label="刷新">
         <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -64,9 +64,9 @@
         <span class="d-ico">📖</span>构建者介绍 · 信息源全景
       </a>
       <div class="drawer-group-title">按内容分类查看</div>
-      <a class="drawer-item sub" href="about.html#x"><span class="d-ico">𝕏</span>X 推文 · 26 位构建者</a>
-      <a class="drawer-item sub" href="about.html#podcasts"><span class="d-ico">🎙</span>播客 · 6 档节目</a>
-      <a class="drawer-item sub" href="about.html#blogs"><span class="d-ico">📄</span>博客 · 2 个官方来源</a>
+      <button class="drawer-item sub" data-filter="x"><span class="d-ico">𝕏</span>X 推文 · 26 位构建者</button>
+      <button class="drawer-item sub" data-filter="podcasts"><span class="d-ico">🎙</span>播客 · 6 档节目</button>
+      <button class="drawer-item sub" data-filter="blogs"><span class="d-ico">📄</span>博客 · 2 个官方来源</button>
       <div class="drawer-group-title">其他</div>
       <button class="drawer-item" id="nav-settings"><span class="d-ico">⚙️</span>设置</button>
     </nav>

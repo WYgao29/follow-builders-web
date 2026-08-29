@@ -301,3 +301,14 @@ button { font-family: inherit; cursor: pointer; }
   margin: 14px 12px 6px; letter-spacing: .5px;
 }
 .drawer-foot { font-size: 11px; color: var(--ink-3); line-height: 1.6; padding: 12px 10px 0; border-top: 1px solid var(--line); margin-top: 10px; }
+
+/* ---- 分类筛选视图 ---- */
+.filter-head { padding: 6px 4px 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.btn-back {
+  border: none; background: transparent; color: var(--accent);
+  font-weight: 700; font-size: 14px; padding: 6px 10px; margin-left: -10px;
+  border-radius: 8px;
+}
+.btn-back:active { background: var(--accent-soft); }
+.filter-title { font-size: 21px; font-weight: 800; margin-top: 2px; }
+.filter-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
