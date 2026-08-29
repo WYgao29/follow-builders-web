@@ -59,7 +59,7 @@ function countFmt(n) {
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v2', // v2：入库时解码 HTML 转义符（v1 缓存含转义符，直接弃用）
+  KEY: 'fb.web.v3', // v3：日期改为"采集批次"语义（按快照日期分组，条目时间戳仅作展示）
   data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
@@ -112,8 +112,12 @@ const DB = {
     Store.save();
   },
 
-  mergeX(feed) {
+  mergeX(feed, batchHintMs) {
     let added = 0;
+    // 批次日 = 快照的采集日期（feed.generatedAt，北京日历日）；
+    // 更新前看到的整批内容统一归为"前一天"，只有新快照进来才归为当天
+    const batchMs = parseDate(feed.generatedAt) ?? batchHintMs ?? null;
+    const batch = batchMs != null ? dayKey(batchMs) : null;
     for (const builder of feed.x || []) {
       const handle = (builder.handle || '').trim();
       if (!handle) continue;
@@ -128,6 +132,7 @@ const DB = {
         if (ms == null) continue;
         this.posts.set(t.id, {
           id: t.id, text: decodeEntities(t.text || ''), ms,
+          batchDay: batch || dayKey(ms),
           url: t.url || '', likes: t.likes || 0, retweets: t.retweets || 0,
           replies: t.replies || 0, handle,
           builder: decodeEntities(builder.name || handle), bio: decodeEntities(builder.bio || ''),
@@ -138,30 +143,36 @@ const DB = {
     return added;
   },
 
-  mergePodcasts(feed, fallbackMs) {
+  mergePodcasts(feed, batchHintMs) {
     let added = 0;
+    const batchMs = parseDate(feed.generatedAt) ?? batchHintMs ?? null;
+    const batch = batchMs != null ? dayKey(batchMs) : null;
     for (const p of feed.podcasts || []) {
       if (!p.guid || this.episodes.has(p.guid)) continue;
-      const ms = parseDate(p.publishedAt) ?? fallbackMs ?? Date.now();
+      const ms = parseDate(p.publishedAt) ?? batchHintMs ?? Date.now();
       this.episodes.set(p.guid, {
         guid: p.guid, show: decodeEntities(p.name || '未知节目'),
         title: decodeEntities(p.title || '未命名单集'),
-        url: p.url || '', ms, transcript: decodeEntities(p.transcript || ''),
+        url: p.url || '', ms, batchDay: batch || dayKey(ms),
+        transcript: decodeEntities(p.transcript || ''),
       });
       added++;
     }
     return added;
   },
 
-  mergeBlogs(feed, fallbackMs) {
+  mergeBlogs(feed, batchHintMs) {
     let added = 0;
+    const batchMs = parseDate(feed.generatedAt) ?? batchHintMs ?? null;
+    const batch = batchMs != null ? dayKey(batchMs) : null;
     for (const b of feed.blogs || []) {
       if (!b.url || this.blogs.has(b.url)) continue;
-      const ms = parseDate(b.publishedAt) ?? fallbackMs ?? Date.now();
+      const ms = parseDate(b.publishedAt) ?? batchHintMs ?? Date.now();
       this.blogs.set(b.url, {
         url: b.url, source: decodeEntities(b.name || '未知来源'),
         title: decodeEntities((b.title || '未命名文章').trim()),
-        ms, author: decodeEntities(b.author || ''), summary: decodeEntities(b.description || ''),
+        ms, batchDay: batch || dayKey(ms),
+        author: decodeEntities(b.author || ''), summary: decodeEntities(b.description || ''),
         content: decodeEntities(b.content || ''), publishedText: b.publishedAt || '',
       });
       added++;
@@ -319,9 +330,9 @@ function render() {
     if (!groups.has(key)) groups.set(key, { posts: [], episodes: [], blogs: [] });
     return groups.get(key);
   };
-  for (const p of DB.posts.values()) bucket(dayKey(p.ms)).posts.push(p);
-  for (const e of DB.episodes.values()) bucket(dayKey(e.ms)).episodes.push(e);
-  for (const b of DB.blogs.values()) bucket(dayKey(b.ms)).blogs.push(b);
+  for (const p of DB.posts.values()) bucket(p.batchDay || dayKey(p.ms)).posts.push(p);
+  for (const e of DB.episodes.values()) bucket(e.batchDay || dayKey(e.ms)).episodes.push(e);
+  for (const b of DB.blogs.values()) bucket(b.batchDay || dayKey(b.ms)).blogs.push(b);
 
   const keys = [...groups.keys()].sort().reverse(); // 新→旧
   dayKeysCache = keys;
@@ -568,7 +579,7 @@ async function fetchAllFeeds(fallbackMs) {
     Mirrors.fetchJSON(PATHS.blogs).catch(() => null),
   ]);
   let added = 0;
-  if (x) added += DB.mergeX(x);
+  if (x) added += DB.mergeX(x, fallbackMs);
   if (podcasts) added += DB.mergePodcasts(podcasts, fallbackMs);
   if (blogs) added += DB.mergeBlogs(blogs, fallbackMs);
   return added;
@@ -677,7 +688,7 @@ async function backfill() {
       }));
       for (const r of results) {
         if (!r) continue;
-        if (r.job.kind === 'x') DB.mergeX(r.feed);
+        if (r.job.kind === 'x') DB.mergeX(r.feed, r.job.ms);
         else if (r.job.kind === 'podcasts') DB.mergePodcasts(r.feed, r.job.ms);
         else DB.mergeBlogs(r.feed, r.job.ms);
         doneSet.add(r.job.kind + ':' + r.job.sha);
