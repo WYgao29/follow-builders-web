@@ -216,7 +216,15 @@ const Mirrors = {
     let lastErr;
     for (const kind of order) {
       try {
-        const res = await fetch(this.url(kind, ref || REF_MAIN, path), { cache: 'no-store' });
+        // 被墙的连接可能无限挂起，12 秒强制超时切下一条线路
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
+        let res;
+        try {
+          res = await fetch(this.url(kind, ref || REF_MAIN, path), { cache: 'no-store', signal: ctrl.signal });
+        } finally {
+          clearTimeout(timer);
+        }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const json = await res.json();
         if (pref === 'auto') this.active = kind;
@@ -554,9 +562,17 @@ function pickSnapshots(dayShas, limitDays, everyN) {
 }
 
 async function listCommitDays(path, limitDays) {
-  const res = await fetch(`${API_COMMITS}?path=${encodeURIComponent(path)}&per_page=100`, {
-    headers: { 'Accept': 'application/vnd.github+json' },
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(`${API_COMMITS}?path=${encodeURIComponent(path)}&per_page=100`, {
+      headers: { 'Accept': 'application/vnd.github+json' },
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 403 || res.status === 429) throw new Error('GitHub API 限流，请稍后再试');
   if (!res.ok) throw new Error('GitHub API HTTP ' + res.status);
   const commits = await res.json();
