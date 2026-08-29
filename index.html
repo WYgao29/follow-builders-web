@@ -14,6 +14,9 @@
 
 <header class="topbar">
   <div class="topbar-row">
+    <button id="btn-menu" class="icon-btn" title="菜单" aria-label="菜单">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+    </button>
     <h1>每日构建者</h1>
     <div class="topbar-actions">
       <button id="btn-refresh" class="icon-btn" title="刷新" aria-label="刷新">
@@ -43,6 +46,34 @@
   <button id="btn-backfill" class="btn-more hidden">加载更早的内容</button>
   <p id="backfill-progress" class="backfill-progress hidden"></p>
   <p class="foot-note">数据来自 follow-builders 公开聚合 · 内容版权归原作者</p>
+</div>
+
+<!-- 侧边栏抽屉 -->
+<div id="drawer-mask" class="drawer-mask hidden">
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="导航菜单">
+    <div class="drawer-head">
+      <div class="drawer-title">每日构建者</div>
+      <div class="drawer-sub">Follow Builders · Web</div>
+    </div>
+    <nav class="drawer-nav">
+      <button class="drawer-item" id="nav-home">
+        <span class="d-ico">📅</span>每日时间线
+      </button>
+      <a class="drawer-item" href="about.html">
+        <span class="d-ico">📖</span>构建者介绍 · 信息源全景
+      </a>
+      <div class="drawer-group-title">按分类查看</div>
+      <a class="drawer-item sub" href="about.html#g-research"><span class="d-ico">🧠</span>研究者与布道者</a>
+      <a class="drawer-item sub" href="about.html#g-anthropic"><span class="d-ico">🤖</span>Anthropic 阵营</a>
+      <a class="drawer-item sub" href="about.html#g-bigtech"><span class="d-ico">🟢</span>OpenAI / Google 阵营</a>
+      <a class="drawer-item sub" href="about.html#g-tooling"><span class="d-ico">🛠</span>编程工具掌门人</a>
+      <a class="drawer-item sub" href="about.html#g-investors"><span class="d-ico">💼</span>投资人与企业掌门人</a>
+      <a class="drawer-item sub" href="about.html#g-content"><span class="d-ico">✍️</span>内容与教育实践者</a>
+      <div class="drawer-group-title">其他</div>
+      <button class="drawer-item" id="nav-settings"><span class="d-ico">⚙️</span>设置</button>
+    </nav>
+    <p class="drawer-foot">数据来自 follow-builders 公开聚合<br>内容版权归原作者</p>
+  </aside>
 </div>
 
 <!-- 全屏阅读器（转录 / 博客） -->
@@ -79,8 +110,8 @@
     <div class="sheet-section">
       <h3>历史回填深度</h3>
       <div class="seg" id="depth-seg">
-        <button data-depth="7">7 天</button>
-        <button data-depth="14" class="active">14 天</button>
+        <button data-depth="7" class="active">7 天</button>
+        <button data-depth="14">14 天</button>
         <button data-depth="30">30 天</button>
       </div>
       <p class="hint">回填会从 GitHub 每日快照恢复更早的内容；已下载的天数不会重复下载。</p>

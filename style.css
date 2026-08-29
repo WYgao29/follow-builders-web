@@ -98,7 +98,7 @@ button { font-family: inherit; cursor: pointer; }
 .day-head .d-stats { margin-left: auto; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
 
 .builder-head {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: flex-start; gap: 10px;
   padding: 14px 4px 8px;
 }
 .avatar {
@@ -112,13 +112,20 @@ button { font-family: inherit; cursor: pointer; }
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; background: var(--card);
 }
-.builder-head .b-name { font-size: 15px; font-weight: 700; }
-.builder-head .b-handle { font-size: 12.5px; color: var(--ink-3); }
-.builder-head .b-bio {
-  font-size: 12.5px; color: var(--ink-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw;
+.builder-head .b-main { flex: 1; min-width: 0; }
+.builder-head .b-line1 {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
 }
-.builder-head .b-count { margin-left: auto; font-size: 12px; color: var(--ink-3); flex-shrink: 0; }
+.builder-head .b-name { font-size: 15.5px; font-weight: 700; line-height: 1.3; }
+.builder-head .b-handle { font-size: 12.5px; color: var(--ink-3); font-weight: 400; }
+.builder-head .b-bio {
+  font-size: 12.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.builder-head .b-count {
+  flex-shrink: 0; font-size: 12px; color: var(--ink-3); margin-left: auto;
+  padding-top: 2px;
+}
 
 .tweet-card {
   background: var(--card); border: 1px solid var(--line); border-radius: 14px;
@@ -242,3 +249,40 @@ button { font-family: inherit; cursor: pointer; }
   margin-bottom: 10px;
 }
 .sheet-done { width: 100%; margin-top: 6px; }
+
+/* ---- 侧边栏抽屉 ---- */
+.topbar-row h1 { margin-right: auto; }
+#btn-menu { margin-right: 2px; }
+
+.drawer-mask {
+  position: fixed; inset: 0; z-index: 70; background: rgba(10, 12, 20, .45);
+}
+.drawer {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: min(80vw, 300px);
+  background: var(--card);
+  padding: calc(18px + var(--safe-top)) 14px calc(16px + var(--safe-bottom));
+  display: flex; flex-direction: column;
+  animation: slide-in .22s ease;
+  overflow-y: auto;
+}
+@keyframes slide-in { from { transform: translateX(-70%); opacity: .4; } to { transform: translateX(0); opacity: 1; } }
+.drawer-head { padding: 4px 10px 14px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.drawer-title { font-size: 18px; font-weight: 800; }
+.drawer-sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.drawer-nav { flex: 1; }
+.drawer-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: none; background: transparent; color: var(--ink);
+  text-decoration: none; text-align: left;
+  font-size: 14.5px; font-weight: 600;
+  border-radius: 10px; padding: 11px 12px;
+}
+.drawer-item:active { background: var(--accent-soft); color: var(--accent); }
+.drawer-item .d-ico { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+.drawer-item.sub { font-size: 13.5px; font-weight: 500; color: var(--ink-2); padding-left: 18px; }
+.drawer-group-title {
+  font-size: 11.5px; font-weight: 700; color: var(--ink-3);
+  margin: 14px 12px 6px; letter-spacing: .5px;
+}
+.drawer-foot { font-size: 11px; color: var(--ink-3); line-height: 1.6; padding: 12px 10px 0; border-top: 1px solid var(--line); margin-top: 10px; }

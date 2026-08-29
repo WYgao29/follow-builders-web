@@ -374,11 +374,13 @@ function render() {
         const info = DB.builderName.get(handle) || { name: posts[0].builder || handle, bio: '' };
         const bh = el('div', 'builder-head');
         bh.appendChild(avatarEl(handle, info.name));
-        const who = el('div');
-        who.appendChild(el('div', 'b-name', info.name || handle));
-        who.appendChild(el('div', 'b-handle', '@' + handle));
-        bh.appendChild(who);
-        if (info.bio) bh.appendChild(el('div', 'b-bio', info.bio));
+        const main = el('div', 'b-main');
+        const line1 = el('div', 'b-line1');
+        line1.appendChild(el('span', 'b-name', info.name || handle));
+        line1.appendChild(el('span', 'b-handle', '@' + handle));
+        main.appendChild(line1);
+        if (info.bio) main.appendChild(el('div', 'b-bio', info.bio));
+        bh.appendChild(main);
         bh.appendChild(el('div', 'b-count', posts.length + ' 条'));
         section.appendChild(bh);
 
@@ -599,7 +601,7 @@ async function backfill() {
   btn.disabled = true;
   btn.classList.add('hidden');
 
-  const depth = Store.pref.depth || 14;
+  const depth = Store.pref.depth || 7;
   const doneSet = new Set(Store.data.doneShas);
 
   try {
@@ -665,12 +667,16 @@ async function backfill() {
 
 function updateBackfillButton() {
   const btn = $('#btn-backfill');
-  const depth = Store.pref.depth || 14;
+  const depth = Store.pref.depth || 7;
   // 最老快照已覆盖到回填深度之外 → 没有更早的历史可拉了
   const covered = Store.data.oldestDay &&
     (Date.now() - Store.data.oldestDay) >= depth * 86400000;
   btn.classList.toggle('hidden', !DB.posts.size || syncBusy || covered);
 }
+
+/* ---------- 侧边栏抽屉 ---------- */
+function openDrawer() { $('#drawer-mask').classList.remove('hidden'); }
+function closeDrawer() { $('#drawer-mask').classList.add('hidden'); }
 
 /* ---------- 设置面板 ---------- */
 function openSettings() {
@@ -678,7 +684,7 @@ function openSettings() {
   const mirror = Store.pref.mirror || 'auto';
   for (const b of document.querySelectorAll('#mirror-seg button'))
     b.classList.toggle('active', b.dataset.mirror === mirror);
-  const depth = String(Store.pref.depth || 14);
+  const depth = String(Store.pref.depth || 7);
   for (const b of document.querySelectorAll('#depth-seg button'))
     b.classList.toggle('active', b.dataset.depth === depth);
 }
@@ -686,6 +692,15 @@ function closeSettings() { $('#settings-mask').classList.add('hidden'); }
 
 /* ---------- 事件绑定 ---------- */
 function bind() {
+  $('#btn-menu').addEventListener('click', openDrawer);
+  $('#drawer-mask').addEventListener('click', (e) => {
+    if (e.target === $('#drawer-mask')) closeDrawer();
+  });
+  $('#nav-home').addEventListener('click', closeDrawer);
+  $('#nav-settings').addEventListener('click', () => {
+    closeDrawer();
+    openSettings();
+  });
   $('#btn-refresh').addEventListener('click', () => refreshCurrent());
   $('#btn-retry').addEventListener('click', () => {
     $('#btn-retry').classList.add('hidden');
