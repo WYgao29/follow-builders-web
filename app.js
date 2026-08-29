@@ -486,11 +486,24 @@ function tweetCard(p) {
   meta.appendChild(el('span', null, timeHM(p.ms)));
   card.appendChild(meta);
   if (p.url) {
-    const a = el('a', 'tweet-link', '在 X 查看原文');
+    const a = el('a', 'tweet-link', '查看原文');
     a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
+    a.insertBefore(xLogo(), a.firstChild);
     card.appendChild(a);
   }
   return card;
+}
+
+/* X 官方 logo */
+function xLogo() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', '13'); svg.setAttribute('height', '13');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('fill', 'currentColor');
+  p.setAttribute('d', 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z');
+  svg.appendChild(p);
+  return svg;
 }
 
 /* ---------- 全屏阅读器 ---------- */
