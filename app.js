@@ -296,6 +296,8 @@ function renderBlogContent(container, text) {
 
 /* ---------- 状态与渲染 ---------- */
 let syncBusy = false;
+let currentDayKey = null;   // 当前展示的日（null = 最新一天）
+let dayKeysCache = [];      // 最近一次渲染的全部日键（新→旧）
 
 function setSync(text) {
   if (text) {
@@ -321,7 +323,8 @@ function render() {
   for (const e of DB.episodes.values()) bucket(dayKey(e.ms)).episodes.push(e);
   for (const b of DB.blogs.values()) bucket(dayKey(b.ms)).blogs.push(b);
 
-  const keys = [...groups.keys()].sort().reverse();
+  const keys = [...groups.keys()].sort().reverse(); // 新→旧
+  dayKeysCache = keys;
   const chips = $('#day-chips');
   const timeline = $('#timeline');
   chips.textContent = '';
@@ -329,18 +332,24 @@ function render() {
 
   if (!keys.length) {
     $('#empty-state').classList.remove('hidden');
+    currentDayKey = null;
+    $('#btn-next-day').classList.add('hidden');
+    updateBackfillButton();
     return;
   }
   $('#empty-state').classList.add('hidden');
 
-  for (const key of keys) {
-    const g = groups.get(key);
-    g.posts.sort((a, b) => b.ms - a.ms);
-    g.episodes.sort((a, b) => b.ms - a.ms);
-    g.blogs.sort((a, b) => b.ms - a.ms);
+  // 单日视图：只渲染当前日（默认最新一天）
+  if (!currentDayKey || !keys.includes(currentDayKey)) currentDayKey = keys[0];
+  const current = currentDayKey;
+  const g = groups.get(current);
+  g.posts.sort((a, b) => b.ms - a.ms);
+  g.episodes.sort((a, b) => b.ms - a.ms);
+  g.blogs.sort((a, b) => b.ms - a.ms);
 
-    const chip = el('a', 'chip');
-    chip.href = '#day-' + key;
+  // 日期快捷条：点击直接切到该日，当前位置高亮
+  for (const key of keys) {
+    const chip = el('button', 'chip' + (key === current ? ' active' : ''));
     const title = dayTitle(key);
     if (title === '今天' || title === '昨天') {
       chip.appendChild(el('b', null, title));
@@ -348,20 +357,29 @@ function render() {
     } else {
       chip.textContent = title;
     }
+    chip.addEventListener('click', () => {
+      currentDayKey = key;
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
     chips.appendChild(chip);
+  }
+  // 让当前激活的胶囊滚入视野
+  const activeChip = chips.querySelector('.chip.active');
+  if (activeChip) activeChip.scrollIntoView({ block: 'nearest', inline: 'center' });
 
-    const section = el('section', 'day-section');
-    section.id = 'day-' + key;
+  // 只渲染当天
+  const section = el('section', 'day-section');
 
-    const head = el('div', 'day-head');
-    head.appendChild(el('span', 'd-title', title));
-    head.appendChild(el('span', 'd-sub', daySub(key)));
-    const bits = [];
-    if (g.posts.length) bits.push(g.posts.length + ' 推文');
-    if (g.episodes.length) bits.push(g.episodes.length + ' 播客');
-    if (g.blogs.length) bits.push(g.blogs.length + ' 博客');
-    head.appendChild(el('span', 'd-stats', bits.join(' · ')));
-    section.appendChild(head);
+  const head = el('div', 'day-head');
+  head.appendChild(el('span', 'd-title', dayTitle(current)));
+  head.appendChild(el('span', 'd-sub', daySub(current)));
+  const bits = [];
+  if (g.posts.length) bits.push(g.posts.length + ' 推文');
+  if (g.episodes.length) bits.push(g.episodes.length + ' 播客');
+  if (g.blogs.length) bits.push(g.blogs.length + ' 博客');
+  head.appendChild(el('span', 'd-stats', bits.join(' · ')));
+  section.appendChild(head);
 
     // 推文（按构建者分组）
     if (g.posts.length) {
@@ -440,7 +458,20 @@ function render() {
     }
 
     timeline.appendChild(section);
+
+  // 底部导航：有更早的一天 → "下一天"；已是最后一天 → 交给"加载更早"按钮
+  const idx = keys.indexOf(current);
+  const older = keys[idx + 1];
+  const nextBtn = $('#btn-next-day');
+  if (older) {
+    nextBtn.textContent = '';
+    nextBtn.appendChild(el('span', 'arr', '↓'));
+    nextBtn.appendChild(document.createTextNode(' 下一天 · ' + dayTitle(older)));
+    nextBtn.classList.remove('hidden');
+  } else {
+    nextBtn.classList.add('hidden');
   }
+  updateBackfillButton();
 }
 
 function svgIcon(path) {
@@ -684,7 +715,10 @@ function updateBackfillButton() {
   // 最老快照已覆盖到回填深度之外 → 没有更早的历史可拉了
   const covered = Store.data.oldestDay &&
     (Date.now() - Store.data.oldestDay) >= depth * 86400000;
-  btn.classList.toggle('hidden', !DB.posts.size || syncBusy || covered);
+  // 只在浏览"最早的一天"时才出现（与"下一天"按钮互斥）
+  const atOldest = dayKeysCache.length > 0 &&
+    currentDayKey === dayKeysCache[dayKeysCache.length - 1];
+  btn.classList.toggle('hidden', !DB.posts.size || syncBusy || covered || !atOldest);
 }
 
 /* ---------- 侧边栏抽屉 ---------- */
@@ -713,6 +747,14 @@ function bind() {
   $('#nav-settings').addEventListener('click', () => {
     closeDrawer();
     openSettings();
+  });
+  $('#btn-next-day').addEventListener('click', () => {
+    const idx = dayKeysCache.indexOf(currentDayKey);
+    const older = dayKeysCache[idx + 1];
+    if (!older) return;
+    currentDayKey = older;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   $('#btn-refresh').addEventListener('click', () => refreshCurrent());
   $('#btn-retry').addEventListener('click', () => {
