@@ -310,6 +310,7 @@ let syncBusy = false;
 let currentDayKey = null;   // 当前展示的日（null = 最新一天）
 let dayKeysCache = [];      // 最近一次渲染的全部日键（新→旧）
 let contentFilter = null;   // null | 'x' | 'podcasts' | 'blogs'（分类筛选视图）
+let pendingBackfill = false; // 回填进行中又调大了深度 → 完成后自动续跑
 
 const FILTER_META = {
   x: {
@@ -800,6 +801,11 @@ async function backfill() {
     syncBusy = false;
     btn.disabled = false;
     updateBackfillButton();
+    // 回填期间又调大了深度 → 自动续跑补齐新区间（一次）
+    if (pendingBackfill) {
+      pendingBackfill = false;
+      backfill();
+    }
   }
 }
 
@@ -892,10 +898,16 @@ function bind() {
   $('#depth-seg').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-depth]');
     if (!b) return;
+    const prev = Store.pref.depth || 7;
     Store.setPref({ depth: Number(b.dataset.depth) });
     for (const x of document.querySelectorAll('#depth-seg button'))
       x.classList.toggle('active', x === b);
     updateBackfillButton();
+    // 深度调大 → 自动补拉新增区间；回填进行中则排队，结束后自动续跑
+    if (Number(b.dataset.depth) > prev) {
+      if (!syncBusy) backfill();
+      else pendingBackfill = true;
+    }
   });
 
   $('#btn-wipe').addEventListener('click', () => {
