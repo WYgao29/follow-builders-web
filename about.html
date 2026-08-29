@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#5d66e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171923" media="(prefers-color-scheme: dark)">
+<title>关于信息源 · 每日构建者</title>
+<style>
+  :root {
+    --accent: #5d66e8; --accent-soft: rgba(93,102,232,.12);
+    --bg: #f2f3f8; --card: #fff; --ink: #1c2130; --ink-2: #4a5165; --ink-3: #8a90a5;
+    --line: #e6e8f0; --safe-top: env(safe-area-inset-top, 0px);
+    --pod: #d15a2b; --pod-soft: #fdeee6; --blog: #1e8577; --blog-soft: #e5f6f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161f; --card: #1e212e; --ink: #e8eaf2; --ink-2: #b4b9c9; --ink-3: #767c90;
+      --line: #2c3040; --accent-soft: rgba(122,130,245,.16);
+      --pod: #f0966f; --pod-soft: rgba(232,115,74,.14); --blog: #4cc2b3; --blog-soft: rgba(43,157,143,.14);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); font-size: 15.5px; line-height: 1.75;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line); padding-top: var(--safe-top);
+  }
+  .topbar-inner { max-width: 680px; margin: 0 auto; display: flex; align-items: center; gap: 4px; padding: 8px 12px; }
+  .topbar a.back {
+    color: var(--accent); text-decoration: none; font-weight: 700; font-size: 15px;
+    display: inline-flex; align-items: center; gap: 2px; padding: 6px 8px; border-radius: 10px;
+  }
+  .topbar a.back:active { background: var(--accent-soft); }
+  .topbar h1 { font-size: 16.5px; font-weight: 800; }
+
+  .wrap { max-width: 680px; margin: 0 auto; padding: 18px 16px; }
+
+  .hero {
+    background: linear-gradient(135deg, #3d3a9e, #7366f2);
+    color: #fff; border-radius: 18px; padding: 26px 22px;
+  }
+  .hero h2 { font-size: 22px; font-weight: 800; line-height: 1.35; }
+  .hero p { margin-top: 10px; font-size: 14px; opacity: .93; }
+  .hero .motto { margin-top: 12px; font-weight: 800; font-size: 15px; }
+  .stats { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .stat {
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 10px; padding: 6px 13px; font-size: 12.5px;
+  }
+  .stat b { font-size: 16px; margin-right: 4px; }
+
+  .how { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 16px; }
+  .how h3 { font-size: 15px; font-weight: 800; margin-bottom: 8px; }
+  .how p { font-size: 13.5px; color: var(--ink-2); margin: 6px 0; }
+  .how p b { color: var(--ink); }
+
+  h2.section { font-size: 20px; font-weight: 800; margin: 34px 0 4px; }
+  h2.section .n { background: var(--accent); color: #fff; border-radius: 7px; font-size: 13px; padding: 1px 9px; margin-right: 7px; }
+  p.section-desc { color: var(--ink-2); font-size: 13.5px; margin-bottom: 16px; }
+  h3.group {
+    font-size: 15px; font-weight: 800; color: var(--accent);
+    margin: 24px 0 12px; padding-left: 10px; border-left: 3.5px solid var(--accent);
+  }
+
+  .cards { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 720px) { .cards { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 17px 18px;
+  }
+  .card .head { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+  .avatar {
+    width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #7366f2, #9a8ff7);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px; position: relative; overflow: hidden;
+  }
+  .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--card); }
+  .who .name { font-size: 16px; font-weight: 800; }
+  .who .handle { font-size: 12.5px; color: var(--ink-3); }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 10px; }
+  .tag { font-size: 11.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 20px; padding: 2px 10px; }
+  .card h4 { font-size: 12.5px; color: var(--ink-3); font-weight: 700; margin: 10px 0 2px; }
+  .card p, .card li { font-size: 13.5px; color: var(--ink-2); }
+  .card ul { padding-left: 17px; }
+  .why { margin-top: 11px; background: var(--accent-soft); border-radius: 10px; padding: 9px 13px; font-size: 13px; }
+  .why b { color: var(--accent); }
+
+  .podcast .avatar { background: linear-gradient(135deg, #e8734a, #f2a65e); }
+  .podcast .tag { color: var(--pod); background: var(--pod-soft); }
+  .podcast .why b { color: var(--pod); }
+  .blogc .avatar { background: linear-gradient(135deg, #2b9d8f, #4cc2b3); }
+  .blogc .tag { color: var(--blog); background: var(--blog-soft); }
+  .blogc .why b { color: var(--blog); }
+
+  footer { max-width: 680px; margin: 40px auto 0; padding: 16px 16px 0; color: var(--ink-3); font-size: 12px; border-top: 1px solid var(--line); }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="back" href="index.html">‹ 返回</a>
+    <h1>关于信息源</h1>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h2>他们是谁？<br>为什么值得每天看一眼？</h2>
+    <p>这个 app 追踪的内容全部来自下面的信息源。筛选标准一句话：</p>
+    <p class="motto">关注「动手造东西的人」，而不是转述观点的网红。</p>
+    <div class="stats">
+      <span class="stat"><b>26</b>位 X 构建者</span>
+      <span class="stat"><b>6</b>个播客</span>
+      <span class="stat"><b>2</b>个官方博客</span>
+      <span class="stat"><b>每日</b>自动更新</span>
+    </div>
+  </div>
+
+  <div class="how">
+    <h3>数据是怎么来的</h3>
+    <p><b>上游</b>：开源项目 follow-builders 的机器人每天定时采集以上信息源的公开内容，打包成三个 JSON 文件放在 GitHub 上。</p>
+    <p><b>本 app</b>：直接读取这些公开文件，按天整理展示。历史内容通过 GitHub 的每日快照记录回填（默认 14 天，设置里可调）。</p>
+    <p><b>版权</b>：内容版权归原作者所有，本 app 仅作个人阅读用途。</p>
+  </div>
+
+  <h2 class="section"><span class="n">26</span>X 上的 AI 构建者</h2>
+  <p class="section-desc">刻意覆盖整个生态：模型公司的掌门人与一线负责人、编程工具创始人、独立开发者、投资人与内容人。</p>
+
+  <h3 class="group">🧠 研究者与布道者</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="head"><div class="avatar">K<img src="avatars/karpathy.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/karpathy?fallback=false'" alt="Karpathy 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Andrej Karpathy</div><div class="handle">@karpathy</div></div></div>
+      <div class="tags"><span class="tag">OpenAI 创始成员</span><span class="tag">前特斯拉 AI 总监</span><span class="tag">教育创业者</span></div>
+      <h4>履历与背景</h4>
+      <p>斯坦福博士，师从李飞飞。OpenAI 创始成员，后任特斯拉 AI 总监主导自动驾驶视觉系统，现创办 AI 教育公司 Eureka Labs。</p>
+      <h4>AI 成果</h4>
+      <ul>
+        <li>全球最受欢迎的深度学习公开课（Zero to Hero 系列）</li>
+        <li>提出 "Software 3.0"（自然语言编程）等影响行业的概念</li>
+        <li>开源 nanoGPT、llm.c，把大模型原理"拆开给人看"</li>
+      </ul>
+      <div class="why"><b>为什么关注：</b>几乎不发废话，每条长推都能成为行业讨论的起点。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">S<img src="avatars/swyx.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/swyx?fallback=false'" alt="Swyx 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Swyx</div><div class="handle">@swyx</div></div></div>
+      <div class="tags"><span class="tag">Latent Space 主理人</span><span class="tag">前 AWS / Cloudflare</span></div>
+      <h4>履历与背景</h4>
+      <p>本名 Shawn Wang，先后在 AWS（Alexa）和 Cloudflare 做开发者关系，现全职投入 AI 内容与创业孵化。</p>
+      <h4>AI 成果</h4>
+      <ul>
+        <li>《The Rise of the AI Engineer》定义了"AI 工程师"这个新职业</li>
+        <li>Latent Space 播客与 AI Engineer 峰会的核心节点</li>
+      </ul>
+      <div class="why"><b>为什么关注：</b>行业风向标——新框架、新范式总是他先提炼成清晰叙事。</div>
+    </div>
+  </div>
+
+  <h3 class="group">🤖 Anthropic 阵营（Claude 的缔造者们）</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="head"><div class="avatar">B<img src="avatars/bcherny.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/bcherny?fallback=false'" alt="Boris Cherny 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Boris Cherny</div><div class="handle">@bcherny</div></div></div>
+      <div class="tags"><span class="tag">Claude Code 之父</span><span class="tag">《Programming TypeScript》作者</span></div>
+      <h4>履历与背景</h4>
+      <p>资深工程人，曾任职 Facebook 等，在 TypeScript 圈早有名望。</p>
+      <h4>AI 成果</h4>
+      <ul>
+        <li>在 Anthropic 内部孵化并主导创造了 Claude Code</li>
+        <li>持续分享"AI 时代怎么写代码"的实战方法论</li>
+      </ul>
+      <div class="why"><b>为什么关注：</b>AI 编程工具的掌舵人，一线思考。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/twitter/AmandaAskell?fallback=false" alt="Amanda Askell 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Amanda Askell</div><div class="handle">@AmandaAskell</div></div></div>
+      <div class="tags"><span class="tag">Anthropic 联合创始人</span><span class="tag">哲学博士</span></div>
+      <h4>履历与背景</h4>
+      <p>纽约大学哲学博士，Anthropic 创始团队元老。</p>
+      <h4>AI 成果</h4>
+      <ul>
+        <li>Claude 的"性格与价值观"主要塑造者（Character 方向负责人）</li>
+        <li>把哲学方法引入 AI 对齐实践</li>
+      </ul>
+      <div class="why"><b>为什么关注：</b>当所有人卷能力时，她在回答"AI 应该是什么样"。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">A<img src="avatars/alexalbert__.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/alexalbert__?fallback=false'" alt="Alex Albert 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Alex Albert</div><div class="handle">@alexalbert__</div></div></div>
+      <div class="tags"><span class="tag">Anthropic 开发者关系负责人</span></div>
+      <h4>履历与背景</h4>
+      <p>创业者出身，Anthropic 面向开发者世界的"门面"。</p>
+      <h4>AI 成果</h4>
+      <ul>
+        <li>Claude 3 / Artifacts / Computer Use 等发布背后的对外主讲人</li>
+      </ul>
+      <div class="why"><b>为什么关注：</b>Claude 重磅新能力常第一时间由他演示。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">C<img src="https://unavatar.io/twitter/_catwu?fallback=false" alt="Cat Wu 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Cat Wu</div><div class="handle">@_catwu</div></div></div>
+      <div class="tags"><span class="tag">Anthropic</span><span class="tag">Claude Code 团队</span></div>
+      <h4>履历与背景</h4>
+      <p>Claude Code 团队的产品工程师。</p>
+      <h4>AI 成果</h4>
+      <ul><li>演示新功能、收集一线反馈并快速落地</li></ul>
+      <div class="why"><b>为什么关注：</b>她的动态就是 Claude Code 的"路线图预告"。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">R<img src="https://unavatar.io/twitter/ryolu_?fallback=false" alt="Ryo Lu 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Ryo Lu</div><div class="handle">@ryolu_</div></div></div>
+      <div class="tags"><span class="tag">Anthropic</span><span class="tag">Claude Code 产品负责人</span></div>
+      <h4>履历与背景</h4>
+      <p>Claude Code 产品方向的负责人。</p>
+      <h4>AI 成果</h4>
+      <ul><li>把 Claude Code 从内部工具带向主力开发工具的产品操盘手</li></ul>
+      <div class="why"><b>为什么关注：</b>极少公开讲产品决策的一线操盘者。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">T<img src="avatars/trq212.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/trq212?fallback=false'" alt="Thariq 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Thariq</div><div class="handle">@trq212</div></div></div>
+      <div class="tags"><span class="tag">Anthropic</span><span class="tag">前 YC W20</span><span class="tag">MIT 媒体实验室</span></div>
+      <h4>履历与背景</h4>
+      <p>Claude Code 团队成员，此前经历 YC 创业、South Park Commons、MIT 媒体实验室。</p>
+      <h4>AI 成果</h4>
+      <ul><li>面向开发者演示与推广 Claude Code，产出大量上手教程</li></ul>
+      <div class="why"><b>为什么关注：</b>推文偏"怎么把 Claude Code 用出新花样"，实操性强。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">C<img src="https://unavatar.io/twitter/claudeai?fallback=false" alt="Claude 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Claude（官方）</div><div class="handle">@claudeai</div></div></div>
+      <div class="tags"><span class="tag">官方账号</span></div>
+      <h4>履历与背景</h4>
+      <p>Anthropic 官方账号，产品发布与能力上新的一手渠道。</p>
+      <div class="why"><b>为什么关注：</b>每条都是真更新，当"官方公告栏"订阅即可。</div>
+    </div>
+  </div>
+
+  <h3 class="group">🟢 OpenAI / Google 阵营</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="head"><div class="avatar">S<img src="https://unavatar.io/twitter/sama?fallback=false" alt="Sam Altman 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Sam Altman</div><div class="handle">@sama</div></div></div>
+      <div class="tags"><span class="tag">OpenAI CEO</span><span class="tag">前 YC 总裁</span></div>
+      <h4>履历与背景</h4>
+      <p>2019 年起执掌 OpenAI，这一轮 AI 浪潮最核心的操盘者之一。</p>
+      <h4>AI 成果</h4>
+      <ul><li>做出 ChatGPT，把 AI 推到十亿人面前；GPT 路线的关键决策人</li></ul>
+      <div class="why"><b>为什么关注：</b>发帖频率低但信息密度属于"必读"。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">T<img src="https://unavatar.io/twitter/thsottiaux?fallback=false" alt="Thibault Sottiaux 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Thibault Sottiaux</div><div class="handle">@thsottiaux</div></div></div>
+      <div class="tags"><span class="tag">OpenAI Codex 工程负责人</span><span class="tag">前 Google 搜索基础设施</span></div>
+      <h4>履历与背景</h4>
+      <p>在 Google 搜索基础设施深耕多年，现领导 OpenAI Codex 工程。</p>
+      <h4>AI 成果</h4>
+      <ul><li>"AI 自己写代码"赛道的核心工程操盘手之一</li></ul>
+      <div class="why"><b>为什么关注：</b>云端编程智能体的一线经验，含量极高。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">J<img src="https://unavatar.io/twitter/joshwoodward?fallback=false" alt="Josh Woodward 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Josh Woodward</div><div class="handle">@joshwoodward</div></div></div>
+      <div class="tags"><span class="tag">Google Labs 副总裁</span><span class="tag">Gemini 应用 / AI Studio</span></div>
+      <h4>履历与背景</h4>
+      <p>Google 消费级 AI 产品线实权负责人。</p>
+      <h4>AI 成果</h4>
+      <ul><li>统领 Gemini 应用、AI Studio、NotebookLM；NotebookLM 音频概览等现象级功能的推动者</li></ul>
+      <div class="why"><b>为什么关注：</b>Google AI 新功能基本从他这里首发演示。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">G<img src="https://unavatar.io/twitter/GoogleLabs?fallback=false" alt="Google Labs 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Google Labs</div><div class="handle">@GoogleLabs</div></div></div>
+      <div class="tags"><span class="tag">官方账号</span></div>
+      <h4>履历与背景</h4>
+      <p>Google 实验部门官方账号（NotebookLM、Jules、Flow 等）。</p>
+      <div class="why"><b>为什么关注：</b>Google 的 AI 黑科技常在这里悄悄上线。</div>
+    </div>
+  </div>
+
+  <h3 class="group">🛠 编程工具掌门人</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="head"><div class="avatar">A<img src="avatars/amasad.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/amasad?fallback=false'" alt="Amjad Masad 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Amjad Masad</div><div class="handle">@amasad</div></div></div>
+      <div class="tags"><span class="tag">Replit CEO / 联合创始人</span></div>
+      <h4>履历与背景</h4>
+      <p>早年参与 Codecademy 与 Hacker News 基础设施，2016 年创办 Replit。</p>
+      <h4>AI 成果</h4>
+      <ul><li>Replit Agent——"一句话搭一个应用"，把 AI 编程带给零基础人群</li></ul>
+      <div class="why"><b>为什么关注：</b>"AI 让人人都能造软件"路线的最前沿。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">G<img src="avatars/rauchg.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/rauchg?fallback=false'" alt="Guillermo Rauch 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Guillermo Rauch</div><div class="handle">@rauchg</div></div></div>
+      <div class="tags"><span class="tag">Vercel CEO</span><span class="tag">Next.js 作者</span></div>
+      <h4>履历与背景</h4>
+      <p>开源明星：写了百万开发者在用的 Next.js，2015 年创办 Vercel。</p>
+      <h4>AI 成果</h4>
+      <ul><li>v0——自然语言生成界面与全栈应用，定义"AI 生成式开发"范式</li></ul>
+      <div class="why"><b>为什么关注：</b>开发者工具风向标，判断极少落空。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">P<img src="avatars/steipete.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/steipete?fallback=false'" alt="Peter Steinberger 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Peter Steinberger</div><div class="handle">@steipete</div></div></div>
+      <div class="tags"><span class="tag">PSPDFKit 创始人</span><span class="tag">OpenClaw 作者</span></div>
+      <h4>履历与背景</h4>
+      <p>iOS 场标志性人物，创办 PSPDFKit 做到行业第一；"退休"后杀回 AI 领域。</p>
+      <h4>AI 成果</h4>
+      <ul><li>OpenClaw——让 AI 智能体真正"动手干活"的开源框架；公开全部极限工作流实验</li></ul>
+      <div class="why"><b>为什么关注：</b>"未来个人工作方式"的活样本。</div>
+    </div>
+  </div>
+
+  <h3 class="group">💼 投资人与企业掌门人</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/twitter/levie?fallback=false" alt="Aaron Levie 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Aaron Levie</div><div class="handle">@levie</div></div></div>
+      <div class="tags"><span class="tag">Box CEO / 联合创始人</span></div>
+      <h4>履历与背景</h4>
+      <p>2005 年辍学创办 Box，企业软件圈服役最久的 CEO 之一。</p>
+      <h4>AI 成果</h4>
+      <ul><li>Box AI——把大模型嵌入企业内容管理的先行实践；金句点评 AI 重构企业软件</li></ul>
+      <div class="why"><b>为什么关注：</b>AI 怎么真正进企业（而非 demo），他的视角最接地气。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">G<img src="avatars/garrytan.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/garrytan?fallback=false'" alt="Garry Tan 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Garry Tan</div><div class="handle">@garrytan</div></div></div>
+      <div class="tags"><span class="tag">Y Combinator 总裁</span><span class="tag">Initialized 联合创始人</span></div>
+      <h4>履历与背景</h4>
+      <p>工程师 + 设计师双栖：Posterous 联合创始人、Initialized 顶级天使基金联合创始人，2023 年起执掌 YC。</p>
+      <h4>AI 成果</h4>
+      <ul><li>亲历数千家 AI 初创的诞生与筛选，推动 YC 批次 AI 公司过半</li></ul>
+      <div class="why"><b>为什么关注：</b>他看到的创业数据可能是全网最多的。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">M<img src="avatars/mattturck.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/mattturck?fallback=false'" alt="Matt Turck 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Matt Turck</div><div class="handle">@mattturck</div></div></div>
+      <div class="tags"><span class="tag">FirstMark 合伙人</span><span class="tag">MAD Podcast 主持</span></div>
+      <h4>履历与背景</h4>
+      <p>数据/AI 投资老兵，Data Driven NYC 创办人、《MAD Landscape》作者。</p>
+      <h4>AI 成果</h4>
+      <ul><li>年度 MAD 全景图是行业公认的生态地图</li></ul>
+      <div class="why"><b>为什么关注：</b>理解 AI 行业结构最好的年度入口之一。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">N<img src="https://unavatar.io/twitter/nikunj?fallback=false" alt="Nikunj Kothari 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Nikunj Kothari</div><div class="handle">@nikunj</div></div></div>
+      <div class="tags"><span class="tag">FPV Ventures 合伙人</span><span class="tag">前 Khosla Ventures</span></div>
+      <h4>履历与背景</h4>
+      <p>电子工程出身，Meter / Opendoor / Shyp / LinkedIn 等公司早期产品成员，后转投资。</p>
+      <h4>AI 成果</h4>
+      <ul><li>专注种子/A 轮 AI 投资，写"AI 原生组织运营"小短文常被疯转</li></ul>
+      <div class="why"><b>为什么关注：</b>工程师出身的极简文风，观点务实。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">A<img src="avatars/adityaag.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/adityaag?fallback=false'" alt="Aditya Agarwal 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Aditya Agarwal</div><div class="handle">@adityaag</div></div></div>
+      <div class="tags"><span class="tag">South Park Commons 合伙人</span><span class="tag">前 Dropbox CTO</span></div>
+      <h4>履历与背景</h4>
+      <p>Facebook 早期工程师、Dropbox CTO、Flipkart 董事，现 SPC 普通合伙人，Bevel Health 联合创始人。</p>
+      <h4>AI 成果</h4>
+      <ul><li>以"造过大系统的人"的视角投资与点评 AI 公司</li></ul>
+      <div class="why"><b>为什么关注：</b>判断技术的标尺是"能不能变成真产品"。</div>
+    </div>
+  </div>
+
+  <h3 class="group">✍️ 内容、教育与产品实践者</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="head"><div class="avatar">D<img src="https://unavatar.io/twitter/danshipper?fallback=false" alt="Dan Shipper 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Dan Shipper</div><div class="handle">@danshipper</div></div></div>
+      <div class="tags"><span class="tag">Every CEO</span><span class="tag">AI & I 播客主持</span></div>
+      <h4>履历与背景</h4>
+      <p>作家出身的创业者，创办 AI 订阅媒体 Every。</p>
+      <h4>AI 成果</h4>
+      <ul><li>开创"跟构建者对谈怎么用 AI 工作"的内容形态并公开方法论</li></ul>
+      <div class="why"><b>为什么关注：</b>研究"聪明人到底怎么用 AI"，每期都是可复用的工作流。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">P<img src="avatars/petergyang.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/petergyang?fallback=false'" alt="Peter Yang 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Peter Yang</div><div class="handle">@petergyang</div></div></div>
+      <div class="tags"><span class="tag">前 Roblox 产品总监</span><span class="tag">AI 教育创作者</span></div>
+      <h4>履历与背景</h4>
+      <p>历任 Roblox 产品总监、AWS 首席产品经理，现全职做 AI 内容。</p>
+      <h4>AI 成果</h4>
+      <ul><li>产品经理视角的 AI 工具教程与访谈，门槛低、可操作性强</li></ul>
+      <div class="why"><b>为什么关注：</b>非技术人学用 AI 的最佳桥梁之一。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">N<img src="avatars/thenanyu.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/thenanyu?fallback=false'" alt="Nan Yu 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Nan Yu</div><div class="handle">@thenanyu</div></div></div>
+      <div class="tags"><span class="tag">前 Notion 产品负责人</span></div>
+      <h4>履历与背景</h4>
+      <p>长期担任 Notion 产品负责人，亲历 Notion AI 早期探索。</p>
+      <h4>AI 成果</h4>
+      <ul><li>大模型嵌入知识管理产品的先行实践者</li></ul>
+      <div class="why"><b>为什么关注：</b>补齐"体验这一半"的产品视角。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">Z<img src="avatars/zarazhangrui.png" onerror="this.onerror=()=>{this.remove()};this.src='https://unavatar.io/twitter/zarazhangrui?fallback=false'" alt="Zara Zhang 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Zara Zhang</div><div class="handle">@zarazhangrui</div></div></div>
+      <div class="tags"><span class="tag">上游 skill 作者</span><span class="tag">独立 AI 开发者</span><span class="tag">Harvard '17</span></div>
+      <h4>履历与背景</h4>
+      <p>常驻加州的华人独立开发者，自述"至今不会手写一行代码"，全部作品用 AI 编程智能体完成。</p>
+      <h4>AI 成果</h4>
+      <ul><li>frontend-slides（28k+ star）、follow-builders（6.4k star）等多个爆款开源项目</li></ul>
+      <div class="why"><b>为什么关注：</b>"不会写代码的人用 AI 做出真产品"的最佳证明——她在展示未来。</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="avatar">M<img src="https://unavatar.io/twitter/realmadhuguru?fallback=false" alt="Madhu Guru 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+        <div class="who"><div class="name">Madhu Guru</div><div class="handle">@realmadhuguru</div></div></div>
+      <div class="tags"><span class="tag">Meta AI 高级总监</span><span class="tag">前 Google</span></div>
+      <h4>履历与背景</h4>
+      <p>Sr Director, AI at Meta; Prev: Google。大厂 AI 一线管理者。</p>
+      <h4>AI 成果</h4>
+      <ul><li>"AI 时代打法半年一变"等一手观察，高频输出实战心得</li></ul>
+      <div class="why"><b>为什么关注：</b>看"Meta 们怎么打 AI 这张牌"。</div>
+    </div>
+  </div>
+
+  <h2 class="section"><span class="n">6</span>播客</h2>
+  <p class="section-desc">覆盖研究、投资到工程实践的全谱系；app 会自动抓取新单集的完整转录。</p>
+  <div class="cards">
+    <div class="card podcast">
+      <div class="head"><div class="avatar">L<img src="https://unavatar.io/youtube/LatentSpacePod?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Latent Space</div><div class="handle">swyx & Alessio Fanelli</div></div></div>
+      <div class="tags"><span class="tag">AI 工程师第一播客</span></div>
+      <p>一线 AI 工程师与创业者访谈，同名 newsletter 与 AI Engineer 峰会是行业节点。</p>
+      <div class="why"><b>听点：</b>技术判断最锐利。</div>
+    </div>
+    <div class="card podcast">
+      <div class="head"><div class="avatar">T<img src="https://unavatar.io/youtube/sequoiacapital?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Training Data</div><div class="handle">红杉资本</div></div></div>
+      <div class="tags"><span class="tag">顶级 VC 官方播客</span></div>
+      <p>红杉 AI 投资团队对话各赛道头部创始人。</p>
+      <div class="why"><b>听点：</b>资本视角看 AI 竞争格局。</div>
+    </div>
+    <div class="card podcast">
+      <div class="head"><div class="avatar">N<img src="https://unavatar.io/youtube/NoPriorsPodcast?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">No Priors</div><div class="handle">Elad Gil & Sarah Guo</div></div></div>
+      <div class="tags"><span class="tag">研究者对谈</span></div>
+      <p>顶级阵容（Ilya 等模型缔造者常做客）。</p>
+      <div class="why"><b>听点：</b>离"模型真相"最近的播客。</div>
+    </div>
+    <div class="card podcast">
+      <div class="head"><div class="avatar">U<img src="https://unavatar.io/youtube/RedpointAI?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Unsupervised Learning</div><div class="handle">Redpoint Ventures</div></div></div>
+      <div class="tags"><span class="tag">投资机构 AI 观察</span></div>
+      <p>从投资与工程结合的视角追踪 AI 落地。</p>
+      <div class="why"><b>听点：</b>信息筛得好、节奏快。</div>
+    </div>
+    <div class="card podcast">
+      <div class="head"><div class="avatar">M<img src="https://unavatar.io/youtube/DataDrivenNYC?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">The MAD Podcast</div><div class="handle">Matt Turck</div></div></div>
+      <div class="tags"><span class="tag">数据/AI 老牌节目</span></div>
+      <p>企业级 AI 与数据基础设施的深度案例。</p>
+      <div class="why"><b>听点：</b>配套年度 MAD 全景图。</div>
+    </div>
+    <div class="card podcast">
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/youtube/every_inc?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">AI & I by Every</div><div class="handle">Dan Shipper</div></div></div>
+      <div class="tags"><span class="tag">"怎么用 AI"实录</span></div>
+      <p>每期请一位构建者现场展示自己的 AI 工作流。</p>
+      <div class="why"><b>听点：</b>不是聊趋势，是实操演示。</div>
+    </div>
+  </div>
+
+  <h2 class="section"><span class="n">2</span>官方博客</h2>
+  <div class="cards">
+    <div class="card blogc">
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/anthropic.com?fallback=false" alt="站点头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Anthropic Engineering</div><div class="handle">anthropic.com/engineering</div></div></div>
+      <div class="tags"><span class="tag">工程实践深文</span></div>
+      <p>多智能体系统、Claude Code 内部实现、上下文工程等一线复盘。</p>
+      <div class="why"><b>价值：</b>"顶级 AI 公司怎么干活"的一手资料。</div>
+    </div>
+    <div class="card blogc">
+      <div class="head"><div class="avatar">C<img src="https://unavatar.io/claude.com?fallback=false" alt="站点头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Claude Blog</div><div class="handle">claude.com/blog</div></div></div>
+      <div class="tags"><span class="tag">产品发布公告</span></div>
+      <p>Claude 新模型、新功能的权威发布渠道。</p>
+      <div class="why"><b>价值：</b>Claude 生态的"官方公告栏"。</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>名单来源：<a href="https://github.com/zarazhangrui/follow-builders/blob/main/config/default-sources.json" target="_blank" rel="noopener">follow-builders / config / default-sources.json</a>（2026-08）。人物介绍基于公开资料与 feed 内官方 bio 整理；头像通过 unavatar.io 按 X 用户名实时获取。</p>
+  <p>上游项目 MIT 许可；内容版权归原作者，本页面仅为信息整理。</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#5d66e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171923" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>每日构建者 · Follow Builders</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <h1>每日构建者</h1>
+    <div class="topbar-actions">
+      <button id="btn-refresh" class="icon-btn" title="刷新" aria-label="刷新">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
+      <button id="btn-settings" class="icon-btn" title="设置" aria-label="设置">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88L2.82 14.16a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.34.68.22l2.39-.96c.5.39 1.05.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.13-.55 1.63-.94l2.39.96c.26.12.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="sync-banner" class="sync-banner hidden">
+    <span class="spinner"></span><span id="sync-text">加载中…</span>
+  </div>
+</header>
+
+<nav id="day-chips" class="day-chips" aria-label="按日期跳转"></nav>
+
+<div id="empty-state" class="empty hidden">
+  <div class="empty-icon">📰</div>
+  <p id="empty-text">正在加载…</p>
+  <button id="btn-retry" class="btn-primary hidden">重试</button>
+</div>
+
+<main id="timeline" class="timeline"></main>
+
+<div class="load-more-zone">
+  <button id="btn-backfill" class="btn-more hidden">加载更早的内容</button>
+  <p id="backfill-progress" class="backfill-progress hidden"></p>
+  <p class="foot-note">数据来自 follow-builders 公开聚合 · 内容版权归原作者</p>
+</div>
+
+<!-- 全屏阅读器（转录 / 博客） -->
+<div id="reader" class="reader hidden" role="dialog" aria-modal="true">
+  <div class="reader-bar">
+    <button id="reader-close" class="icon-btn" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+    <div id="reader-title" class="reader-title"></div>
+    <a id="reader-link" class="icon-btn hidden" target="_blank" rel="noopener" aria-label="打开原文">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+    </a>
+  </div>
+  <div id="reader-body" class="reader-body"></div>
+</div>
+
+<!-- 设置面板 -->
+<div id="settings-mask" class="sheet-mask hidden">
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="设置">
+    <div class="sheet-grip"></div>
+    <h2>设置</h2>
+
+    <div class="sheet-section">
+      <h3>数据线路</h3>
+      <div class="seg" id="mirror-seg">
+        <button data-mirror="auto" class="active">自动</button>
+        <button data-mirror="github">GitHub 直连</button>
+        <button data-mirror="jsdelivr">jsDelivr</button>
+      </div>
+      <p class="hint" id="mirror-hint">自动模式：优先直连，失败自动切换备用线路（大陆网络建议保持自动）。</p>
+      <p class="hint">线路状态：<span id="mirror-status">未测试</span></p>
+    </div>
+
+    <div class="sheet-section">
+      <h3>历史回填深度</h3>
+      <div class="seg" id="depth-seg">
+        <button data-depth="7">7 天</button>
+        <button data-depth="14" class="active">14 天</button>
+        <button data-depth="30">30 天</button>
+      </div>
+      <p class="hint">回填会从 GitHub 每日快照恢复更早的内容；已下载的天数不会重复下载。</p>
+    </div>
+
+    <div class="sheet-section">
+      <h3>数据</h3>
+      <a id="btn-about" class="btn-outline" href="about.html">了解这 26 位信息源是谁 →</a>
+      <button id="btn-wipe" class="btn-danger">清空本地缓存</button>
+      <p class="hint about">内容来自 follow-builders 中央聚合（X 推文、YouTube 播客转录、官方博客），版权归原作者，仅作个人阅读用途。</p>
+    </div>
+
+    <button id="btn-settings-close" class="btn-primary sheet-done">完成</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
