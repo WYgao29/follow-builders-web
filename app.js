@@ -57,6 +57,17 @@ function countFmt(n) {
   return (n / 1000000).toFixed(1) + 'M';
 }
 
+/* 链接白名单：feed 内容是第三方数据，只放行 http(s)，
+ * 杜绝 javascript: 等伪协议注入 */
+function safeURL(u) {
+  if (typeof u !== 'string' || !u.trim()) return null;
+  try {
+    const url = new URL(u, location.href);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  } catch (e) { /* 非法链接按无链接处理 */ }
+  return null;
+}
+
 /* ---------- 本地缓存 ---------- */
 const Store = {
   KEY: 'fb.web.v3', // v3：日期改为"采集批次"语义（按快照日期分组，条目时间戳仅作展示）
@@ -221,11 +232,16 @@ const Mirrors = {
 
   async fetchJSON(path, ref) {
     const pref = Store.pref.mirror || 'auto';
-    const order = pref === 'auto'
-      ? (this.active ? [this.active, ...this.order.filter(k => k !== this.active)] : this.order)
+    const now = Date.now();
+    let cand = pref === 'auto'
+      ? (this.active ? [this.active, ...this.order.filter(k => k !== this.active)] : [...this.order])
       : [pref];
+    if (pref === 'auto') {
+      // 冷却中的线路排到队尾（失败过一次 5 分钟内不再优先尝试）
+      cand.sort((a, b) => ((this.coolUntil[a] || 0) < now ? 0 : 1) - ((this.coolUntil[b] || 0) < now ? 0 : 1));
+    }
     let lastErr;
-    for (const kind of order) {
+    for (const kind of cand) {
       try {
         // 被墙的连接可能无限挂起，12 秒强制超时切下一条线路
         const ctrl = new AbortController();
@@ -238,16 +254,23 @@ const Mirrors = {
         }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const json = await res.json();
-        if (pref === 'auto') this.active = kind;
+        if (pref === 'auto') {
+          this.active = kind;
+          delete this.coolUntil[kind];
+        }
         updateMirrorStatus(`当前走「${this.label(kind)}」`);
         return json;
-      } catch (e) { lastErr = e; }
+      } catch (e) {
+        lastErr = e;
+        if (pref === 'auto') this.coolUntil[kind] = Date.now() + 5 * 60 * 1000;
+      }
     }
     updateMirrorStatus('所有线路均失败');
     throw lastErr || new Error('网络失败');
   },
 };
 Mirrors.active = null;
+Mirrors.coolUntil = {};
 
 /* ---------- 转录解析（与 iOS 版同一规则） ---------- */
 const SEG_RE = /^(.{1,60}?)\s*\|\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*$/;
@@ -288,9 +311,14 @@ function renderBlogContent(container, text) {
       if (m.index > idx) para.push(document.createTextNode(line.slice(idx, m.index)));
       if (m[1] !== undefined) para.push(el('strong', null, m[1]));
       else {
-        const a = el('a', null, m[2]);
-        a.href = m[3]; a.target = '_blank'; a.rel = 'noopener';
-        para.push(a);
+        const href = safeURL(m[3]);
+        if (href) {
+          const a = el('a', null, m[2]);
+          a.href = href; a.target = '_blank'; a.rel = 'noopener';
+          para.push(a);
+        } else {
+          para.push(document.createTextNode(m[2]));
+        }
       }
       idx = m.index + m[0].length;
     }
@@ -340,6 +368,12 @@ function setSync(text) {
   } else {
     $('#sync-banner').classList.add('hidden');
   }
+}
+
+/* 已有缓存时的轻量错误提示：不覆盖页面，几秒后自动消失 */
+function showTransientError(msg) {
+  setSync(msg);
+  setTimeout(() => { if (!syncBusy) setSync(null); }, 5000);
 }
 
 function updateMirrorStatus(text) {
@@ -460,6 +494,7 @@ function render() {
   // 分类筛选视图：跨天汇总某一类内容
   if (contentFilter) {
     chips.style.display = 'none';
+    document.body.classList.add('filter-mode');
     $('#app-title').textContent = FILTER_META[contentFilter].title;
 
     const fhead = el('div', 'filter-head');
@@ -503,6 +538,7 @@ function render() {
     return;
   }
   chips.style.display = '';
+  document.body.classList.remove('filter-mode');
   $('#app-title').textContent = '造浪者';
 
   // 单日视图：只渲染当前日（默认最新一天）
@@ -612,10 +648,13 @@ function tweetCard(p) {
   meta.appendChild(el('span', null, timeHM(p.ms)));
   card.appendChild(meta);
   if (p.url) {
-    const a = el('a', 'tweet-link', '查看原文');
-    a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
-    a.insertBefore(xLogo(), a.firstChild);
-    card.appendChild(a);
+    const href = safeURL(p.url);
+    if (href) {
+      const a = el('a', 'tweet-link', '查看原文');
+      a.href = href; a.target = '_blank'; a.rel = 'noopener';
+      a.insertBefore(xLogo(), a.firstChild);
+      card.appendChild(a);
+    }
   }
   return card;
 }
@@ -681,11 +720,15 @@ async function refreshCurrent({ silent } = {}) {
     render();
     if (!silent || added) setSync(null);
   } catch (e) {
-    if (!silent) {
+    const msg = '刷新失败：' + (e && e.message ? e.message : '网络异常') + '，可尝试切换数据线路';
+    if (DB.posts.size) {
+      // 已有缓存内容：轻提示即可，不打断阅读
+      showTransientError(msg);
+    } else {
       setSync(null);
       const empty = $('#empty-state');
       empty.classList.remove('hidden');
-      $('#empty-text').textContent = '加载失败：' + (e && e.message ? e.message : '网络异常') + '。可尝试切换数据线路。';
+      $('#empty-text').textContent = msg;
       $('#btn-retry').classList.remove('hidden');
     }
   } finally {
@@ -783,7 +826,7 @@ async function backfill() {
       prog.textContent = `已回填 ${done}/${total} 份历史快照`;
       prog.classList.remove('hidden');
       DB.persist();
-      render();
+      // 注意：循环内不做全量渲染，避免用户阅读时页面反复跳动；结束后统一渲染
     }
 
     Store.data.doneShas = [...doneSet];
@@ -793,6 +836,8 @@ async function backfill() {
     Store.data.lastRefresh = Date.now();
     DB.persist();
     setSync(null);
+    prog.classList.add('hidden');
+    render();
   } catch (e) {
     setSync(null);
     prog.textContent = '回填失败：' + (e && e.message ? e.message : '网络异常') + '（稍后可重试）';
@@ -815,7 +860,6 @@ function updateBackfillButton() {
   // 最老快照已覆盖到回填深度之外 → 没有更早的历史可拉了
   const covered = Store.data.oldestDay &&
     (Date.now() - Store.data.oldestDay) >= depth * 86400000;
-  // 只在浏览"最早的一天"时才出现（与"下一天"按钮互斥）
   // 只在时间线视图、浏览"最早的一天"时才出现（与"下一天"按钮互斥）
   const atOldest = !contentFilter && dayKeysCache.length > 0 &&
     currentDayKey === dayKeysCache[dayKeysCache.length - 1];
@@ -914,10 +958,23 @@ function bind() {
     if (!confirm('清空本地缓存的数据？下次打开将重新加载。')) return;
     Store.wipe();
     DB.posts.clear(); DB.episodes.clear(); DB.blogs.clear(); DB.builderName.clear();
+    // 同步重置视图与线路状态
+    contentFilter = null; currentDayKey = null; pendingBackfill = false;
+    Mirrors.active = null; Mirrors.coolUntil = {};
+    $('#backfill-progress').classList.add('hidden');
+    document.body.classList.remove('filter-mode');
     closeSettings();
     render();
     updateBackfillButton();
     refreshCurrent();
+  });
+
+  // Esc 依次关闭阅读器 / 设置 / 侧边栏
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('#reader').classList.contains('hidden')) closeReader();
+    else if (!$('#settings-mask').classList.contains('hidden')) closeSettings();
+    else if (!$('#drawer-mask').classList.contains('hidden')) closeDrawer();
   });
 }
 
@@ -936,7 +993,7 @@ function testHook() {
       if (blogs.length) document.querySelectorAll('.row-card.blog')[0]?.click();
     }
   }, 500);
-  setTimeout(() => clearInterval(wait), 30000);
+  setTimeout(() => clearInterval(wait), 120000); // 首启回填可能超过一分钟
 }
 
 /* ---------- 启动 ---------- */
