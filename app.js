@@ -475,6 +475,42 @@ function expectedBatchDayLocal(now = new Date()) {
   return dayKey(ref.getTime());
 }
 
+/* ---------- 保留窗口（滑动窗口） ----------
+ * depth 同时是保留窗口：出现更新的批次后，超出窗口的旧日期自动清除；
+ * 对应的回填记录一并移除（之后调大深度可重新拉回）。 */
+function keyToMs(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d, 12).getTime();
+}
+
+function pruneOldDays() {
+  if (!DB.posts.size && !DB.episodes.size && !DB.blogs.size) return;
+  const depth = Store.pref.depth || 7;
+  const cutoffKey = dayKey(keyToMs(expectedBatchDayLocal()) - (depth - 1) * 86400000);
+  let removed = false;
+  const drop = (map) => {
+    for (const [k, it] of [...map]) {
+      if ((it.batchDay || dayKey(it.ms)) < cutoffKey) { map.delete(k); removed = true; }
+    }
+  };
+  drop(DB.posts); drop(DB.episodes); drop(DB.blogs);
+  if (!removed) return;
+
+  // 移除被清理日期的回填记录（旧格式无日期的条目保留，按未知日期处理）
+  Store.data.doneShas = (Store.data.doneShas || []).filter((e) => {
+    const day = e.split(':').slice(2).join(':');
+    return !day || day >= cutoffKey;
+  });
+  // 重算最老批次时间
+  let minDay = null;
+  const scan = (it) => { const d = it.batchDay || dayKey(it.ms); if (minDay === null || d < minDay) minDay = d; };
+  for (const p of DB.posts.values()) scan(p);
+  for (const e of DB.episodes.values()) scan(e);
+  for (const b of DB.blogs.values()) scan(b);
+  Store.data.oldestDay = minDay ? keyToMs(minDay) : undefined;
+  DB.persist();
+}
+
 function newestLoadedBatchDay() {
   let newest = null;
   const scan = (it) => {
@@ -752,6 +788,7 @@ async function refreshCurrent({ silent } = {}) {
   try {
     const beforeNewest = newestLoadedBatchDay();
     const added = await fetchAllFeeds(Date.now());
+    pruneOldDays(); // 滑动窗口：新批次到来后清除超窗旧日期
     Store.data.lastRefresh = Date.now();
     DB.persist();
     render();
@@ -826,7 +863,11 @@ async function backfill() {
   btn.classList.add('hidden');
 
   const depth = Store.pref.depth || 7;
-  const doneSet = new Set(Store.data.doneShas);
+  const doneMap = new Map(); // 'kind:sha' -> 'kind:sha:day'
+  for (const e of (Store.data.doneShas || [])) {
+    const key = e.split(':').slice(0, 2).join(':');
+    doneMap.set(key, e);
+  }
 
   try {
     setSync('正在查询历史快照…');
@@ -841,7 +882,7 @@ async function backfill() {
       ...pickSnapshots(xDays, depth, 1).map(s => ({ kind: 'x', sha: s.sha, ms: s.ms })),
       ...pickSnapshots(blogDays, depth, 2).map(s => ({ kind: 'blogs', sha: s.sha, ms: s.ms })),
       ...pickSnapshots(podDays, depth, 7).map(s => ({ kind: 'podcasts', sha: s.sha, ms: s.ms })),
-    ].filter(j => !doneSet.has(j.kind + ':' + j.sha));
+    ].filter(j => !doneMap.has(j.kind + ':' + j.sha));
 
     const total = jobs.length;
     let done = 0;
@@ -860,22 +901,24 @@ async function backfill() {
         if (r.job.kind === 'x') DB.mergeX(r.feed, r.job.ms);
         else if (r.job.kind === 'podcasts') DB.mergePodcasts(r.feed, r.job.ms);
         else DB.mergeBlogs(r.feed, r.job.ms);
-        doneSet.add(r.job.kind + ':' + r.job.sha);
+        doneMap.set(r.job.kind + ':' + r.job.sha, r.job.kind + ':' + r.job.sha + ':' + dayKey(r.job.ms));
         oldestJobMs = Math.min(oldestJobMs, r.job.ms);
       }
       done += chunk.length;
       setSync(`正在回填历史 ${Math.min(done, total)}/${total}`);
       prog.textContent = `已回填 ${done}/${total} 份历史快照`;
       prog.classList.remove('hidden');
+      Store.data.doneShas = [...doneMap.values()]; // 中断也不丢已完成进度
       DB.persist();
       // 注意：循环内不做全量渲染，避免用户阅读时页面反复跳动；结束后统一渲染
     }
 
-    Store.data.doneShas = [...doneSet];
+    Store.data.doneShas = [...doneMap.values()];
     if (Number.isFinite(oldestJobMs)) {
       Store.data.oldestDay = Math.min(Store.data.oldestDay || Infinity, oldestJobMs);
     }
     Store.data.lastRefresh = Date.now();
+    pruneOldDays(); // 滑动窗口修剪
     DB.persist();
     setSync(null);
     prog.classList.add('hidden');
@@ -993,6 +1036,9 @@ function bind() {
     if (Number(b.dataset.depth) > prev) {
       if (!syncBusy) backfill();
       else pendingBackfill = true;
+    } else if (Number(b.dataset.depth) < prev) {
+      pruneOldDays(); // 深度调小 → 立即按新窗口修剪
+      render();
     }
   });
 
@@ -1007,8 +1053,11 @@ function bind() {
     document.body.classList.remove('filter-mode');
     closeSettings();
     render();
-    updateBackfillButton();
-    refreshCurrent();
+    // 清空后等同首次启动：拉当前批次 + 自动回填历史
+    (async () => {
+      await refreshCurrent();
+      if (DB.posts.size) await backfill();
+    })();
   });
 
   // 批次新鲜度：回到前台或每 5 分钟检查一次是否该拉新批次
