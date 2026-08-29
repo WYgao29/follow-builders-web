@@ -1,6 +1,6 @@
-# Follow Builders Web
+# 造浪者（Follow Builders Web）
 
-follow-builders iOS app 的网页版：按天浏览 AI 构建者内容（X 推文 / 播客转录 / 官方博客全文）。纯静态页面，零依赖、零构建、零后端，无需任何 API key。
+「造浪者」—— follow-builders 的网页版：每天看一眼正在造 AI 浪潮的人（X 推文 / 播客转录 / 官方博客）。AI 时代，关注造浪的人。纯静态页面，零依赖、零构建、零后端，无需任何 API key。
 
 ## 使用方式
 
