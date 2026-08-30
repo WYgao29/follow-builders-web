@@ -1,82 +1,63 @@
 # 造浪者（Follow Builders Web）
 
-「造浪者」—— follow-builders 的网页版：每天看一眼正在造 AI 浪潮的人。**数据来自 [zaolangzhe-data](https://github.com/WYgao29/zaolangzhe-data)**：GitHub Actions 每天 15:30 抓取上游数据，用智谱 GLM 预生成中文译文、摘要与 AI 日报，本页面直接展示——打开即看中文，无需任何 Key。AI 时代，关注造浪的人。纯静态页面，零依赖、零构建、零后端，无需任何 API key。
+「造浪者」是 [follow-builders](https://github.com/zarazhangrui/follow-builders) 的中文网页阅读器：每天看一眼正在构建 AI 产品的人。它优先读取 [zaolangzhe-data](https://github.com/WYgao29/zaolangzhe-data) 预加工的中文 v2 数据，纯静态、零运行时依赖、无需 API Key。
 
-## 使用方式
+## 运行
 
-### 方式一：直接打开（最快）
-
-双击 `index.html` 即可在浏览器使用（GitHub raw 与 jsDelivr 均允许跨域，本地文件也能拉数据）。
-
-### 方式二：本地起服务
+建议通过本地 HTTP 服务打开：
 
 ```bash
-cd follow-builders-web
 python3 -m http.server 8931
-# 浏览器打开 http://127.0.0.1:8931
+# http://127.0.0.1:8931
 ```
 
-### 方式三：发布到 GitHub Pages（免费、手机随时访问）
+也可直接发布到 GitHub Pages：在仓库 Settings → Pages 中选择目标分支及 `/ (root)`。
 
-1. 在 GitHub 新建一个仓库（或直接把本目录推到现有仓库的 `web` 分支）
-2. 仓库 Settings → Pages → Source 选分支和 `/ (root)` → Save
-3. 一分钟后访问 `https://<你的用户名>.github.io/<仓库名>/`
+## 数据与降级策略
+
+网页首先请求中文数据仓的 `data/index.json`，再按设置读取最近 7、14 或 30 个 `data/days/YYYY-MM-DD.json` 日分片。日分片是 v2 扁平数组，按推文 `id`、播客 `guid`、博客 `url` 去重；重复项保留译文更完整的版本。
+
+所选中文分片必须全部通过结构、计数和 URL 校验。中文源不可用时，网页会整体降级到上游当前的三份完整快照；不会把缺少其中一种内容的 partial snapshot 当成成功。两层都失败时保留已有缓存并显示错误，且不会更新成功刷新时间。
+
+浏览器缓存键为 `fb.web.v5`。升级到 v2 后不会读取旧 v4 数据，以免旧聚合结构污染日分片数据。
 
 ## 功能
 
-- **单日视图**：一次展示一天（按本地时区日历日分组，今天/昨天高亮），底部「下一天」按钮逐日往后翻，顶部日期胶囊直接跳转任意一天
-- **推文**：按构建者分组（头像/签名/条数），互动数据，跳转 X 原文
-- **播客**：点开全屏转录阅读器，"说话人 | 时间段" 分段渲染
-- **博客**：点开全屏阅读器，正文轻量 Markdown 渲染（粗体/链接/标题）
-- **历史回填**：与 iOS 版同策略（commit 台账 → X 每日一份 / 博客隔天 / 播客每 7 天），默认深度 7 天（设置可调 7/14/30），分批拉取带进度，断点续传（已下载的快照存 localStorage 不重复下载）
-- **镜像自动切换**：GitHub 直连优先，失败自动切 jsDelivr；设置里可手动锁定线路（大陆网络建议保持"自动"）
-- **中英文切换**：卡片默认显示中文译文/摘要（数据仓库预生成），点「EN」看英文原文
-- **AI 日报**：每天的中文日报由数据管线预生成，打开即展示
-- **侧边栏抽屉**：构建者介绍入口 + 内容分类筛选器（X 推文 / 播客 / 博客，跨天汇总已加载内容）
-- **本地缓存**：已拉取内容存 localStorage（非 cookie），二次打开秒出，后台静默刷新（1 小时节流）
-- **深色模式**：跟随系统
+- 单日时间线与最近 7/14/30 日切换
+- X 推文、播客转录、博客正文的中英文阅读
+- GitHub 直连与 jsDelivr 自动切换，线路状态按仓库隔离
+- 内容分类筛选、深色模式、本地缓存与小时级静默刷新
+- 外链只允许 HTTP(S)，第三方内容只通过 `textContent` / DOM API 渲染
+- 抽屉、设置和阅读器支持焦点接管、Tab 循环、Escape 关闭及焦点恢复
 
 ## 文件结构
 
-```
+```text
 follow-builders-web/
-├── index.html              # 页面骨架（顶栏 / 日期条 / 时间线 / 阅读器 / 设置面板）
-├── about.html              # 信息源介绍页（26 构建者 + 6 播客 + 2 博客，设置面板可进入）
-├── style.css               # 移动端优先样式（safe-area、深色模式、粘性头部）
-├── app.js                  # 数据层 + 交互（镜像、去重合并、分组渲染、回填、阅读器、头像）
-├── avatars/                # 构建期核验下载的真实头像（14 人）
-└── scripts/
-    ├── cdp-shot.js         # 无头 Chrome 手机视口验证脚本
-    └── fetch-avatars.js    # 真实头像抓取（GitHub API 核验身份后下载）
+├── index.html              # 页面骨架
+├── about.html              # 信息源介绍
+├── style.css               # 移动端优先样式
+├── data-core.js            # 可测试的 v2 契约、加载与安全 URL 核心
+├── app.js                  # 浏览器状态、渲染、镜像与上游降级
+├── avatars/                # 本地头像缓存
+├── test/                   # Node 单元与跨仓契约测试
+└── scripts/feature-test.js # 无头 Chrome 端到端回归
 ```
-
-## 真实头像的三层兜底
-
-头像源为 **X 与 YouTube**（不经 GitHub）：
-
-1. **unavatar.io 运行时获取**：人物走 `unavatar.io/twitter/{handle}`（X 源）；播客走 `unavatar.io/youtube/{频道}`；博客走 `unavatar.io/{官方域名}`。部分网络对该服务限流（429），失败自动落下一层
-2. **本地 `avatars/{xhandle}.png` 缓存**：历史上经身份核验下载的真实头像（14 人），unavatar 不可用时兜底
-3. **首字母圆标**：前两层都失败的最终兜底
-
-补充/更新头像：`node scripts/fetch-avatars.js`（从 X 源拉取，`--force` 覆盖现有文件；部分网络限流时换环境重跑，或依赖页面运行时自动在线补齐）。
-
-## 实现约定（改代码前读）
-
-- **数据流与 iOS 版一致**：feed JSON → 内存 DB（按唯一键去重：推文 id / 播客 guid / 博客 url）→ 按本地日历日分组渲染。改去重或分组逻辑时两端保持对齐。
-- **日期回退**：`publishedAt` 缺失回退快照 commit 时间（回填 job 传入），禁止 `Date()`。
-- **HTML 转义符**：上游内容偶见 `&#x27;` 等实体，入库前统一 `decodeEntities`；新增字段记得套一层。
-- **安全**：所有 feed 内容一律 `textContent` / DOM API 渲染，禁止 `innerHTML` 拼接（内容是第三方数据）。
-- **缓存版本**：`Store.KEY` 的版本号在数据结构/清洗规则变化时递增（当前 v2），旧缓存自动弃用。
-- **localStorage 容量**：30 天全量约 1-2MB，`save()` 已做 quota 容错（超限只保留内存数据）。
-- 回填 API 走 `api.github.com`（未认证限流 60 次/小时，每次回填仅 3 次 API 调用 + N 次内容拉取）。
 
 ## 测试
 
-本地起服务后用无头 Chrome 走移动端视口验证：
-
 ```bash
-python3 -m http.server 8931 &
-node scripts/cdp-shot.js "http://127.0.0.1:8931/index.html" /tmp/shot.png ".day-section" 0 30000
+npm test
+python3 -m http.server 8931
+node scripts/feature-test.js http://127.0.0.1:8931
 ```
 
-调试参数：`?open=first-podcast` / `?open=first-blog` 可直接打开对应阅读器（测试钩子，见 app.js `testHook`）。
+`npm test` 在相邻位置找到 `zaolangzhe-data` 时，会读取真实 index 与全部日分片做跨仓契约验证。CI 会将数据仓检出到网页仓内并强制执行该测试。
+
+## 头像降级
+
+信息源介绍页优先使用已有本地头像；本地文件加载失败时尝试对应的 unavatar.io 地址，再失败则保留首字母圆标。远程图片均使用 `referrerpolicy="no-referrer"`。
+
+## 许可与内容版权
+
+网页代码采用 [MIT License](LICENSE)。聚合的推文、播客、博客及其译文版权归原作者或相应权利人所有；本仓库许可证不授予对聚合内容的额外权利。

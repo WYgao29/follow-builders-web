@@ -38,6 +38,7 @@
     display: inline-flex; align-items: center; gap: 2px; padding: 6px 8px; border-radius: 10px;
   }
   .topbar a.back:active { background: var(--accent-soft); }
+  a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
   .topbar h1 { font-size: 16.5px; font-weight: 800; }
 
   .wrap { max-width: 680px; margin: 0 auto; padding: 18px 16px; }
@@ -129,8 +130,8 @@
 
   <div class="how">
     <h3>数据是怎么来的</h3>
-    <p><b>上游</b>：开源项目 follow-builders 的机器人每天定时采集以上信息源的公开内容，打包成三个 JSON 文件放在 GitHub 上。</p>
-    <p><b>本 app</b>：直接读取这些公开文件，按天整理展示。历史内容通过 GitHub 的每日快照记录回填（默认 14 天，设置里可调）。</p>
+    <p><b>上游</b>：开源项目 follow-builders 定时采集以上信息源的公开内容，打包成三个 JSON 文件放在 GitHub 上。</p>
+    <p><b>中文数据</b>：zaolangzhe-data 自动翻译或摘要新增内容，按北京时间写入 v2 日分片；本 app 默认读取最近 7 天，可调为 14 或 30 天。</p>
     <p><b>版权</b>：内容版权归原作者所有，本 app 仅作个人阅读用途。</p>
   </div>
 
@@ -140,7 +141,7 @@
   <h3 class="group" id="g-research">🧠 研究者与布道者</h3>
   <div class="cards">
     <div class="card">
-      <div class="head"><div class="avatar">K<img src="avatars/karpathy.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/karpathy?fallback=false'" alt="Karpathy 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">K<img src="avatars/karpathy.png" data-fallback-src="https://unavatar.io/twitter/karpathy?fallback=false" alt="Karpathy 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Andrej Karpathy</div><div class="handle">@karpathy</div></div></div>
       <div class="tags"><span class="tag">OpenAI 创始成员</span><span class="tag">前特斯拉 AI 总监</span><span class="tag">教育创业者</span></div>
             <p>斯坦福博士，师从李飞飞。OpenAI 创始成员，后任特斯拉 AI 总监主导自动驾驶视觉系统，现创办 AI 教育公司 Eureka Labs。</p>
@@ -154,7 +155,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">S<img src="avatars/swyx.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/swyx?fallback=false'" alt="Swyx 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">S<img src="avatars/swyx.png" data-fallback-src="https://unavatar.io/twitter/swyx?fallback=false" alt="Swyx 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Swyx</div><div class="handle">@swyx</div></div></div>
       <div class="tags"><span class="tag">Latent Space 主理人</span><span class="tag">前 AWS / Cloudflare</span></div>
             <p>本名 Shawn Wang，先后在 AWS（Alexa）和 Cloudflare 做开发者关系，现全职投入 AI 内容与创业孵化。</p>
@@ -170,7 +171,7 @@
   <h3 class="group" id="g-anthropic">🤖 Anthropic 阵营（Claude 的缔造者们）</h3>
   <div class="cards">
     <div class="card">
-      <div class="head"><div class="avatar">B<img src="avatars/bcherny.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/bcherny?fallback=false'" alt="Boris Cherny 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">B<img src="avatars/bcherny.png" data-fallback-src="https://unavatar.io/twitter/bcherny?fallback=false" alt="Boris Cherny 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Boris Cherny</div><div class="handle">@bcherny</div></div></div>
       <div class="tags"><span class="tag">Claude Code 之父</span><span class="tag">《Programming TypeScript》作者</span></div>
             <p>资深工程人，曾任职 Facebook 等，在 TypeScript 圈早有名望。</p>
@@ -183,7 +184,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">A<img src="https://unavatar.io/twitter/AmandaAskell?fallback=false" alt="Amanda Askell 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/twitter/AmandaAskell?fallback=false" alt="Amanda Askell 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Amanda Askell</div><div class="handle">@AmandaAskell</div></div></div>
       <div class="tags"><span class="tag">Anthropic 联合创始人</span><span class="tag">哲学博士</span></div>
             <p>纽约大学哲学博士，Anthropic 创始团队元老。</p>
@@ -196,7 +197,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">A<img src="avatars/alexalbert__.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/alexalbert__?fallback=false'" alt="Alex Albert 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">A<img src="avatars/alexalbert__.png" data-fallback-src="https://unavatar.io/twitter/alexalbert__?fallback=false" alt="Alex Albert 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Alex Albert</div><div class="handle">@alexalbert__</div></div></div>
       <div class="tags"><span class="tag">Anthropic 开发者关系负责人</span></div>
             <p>创业者出身，Anthropic 面向开发者世界的"门面"。</p>
@@ -208,7 +209,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">C<img src="https://unavatar.io/twitter/_catwu?fallback=false" alt="Cat Wu 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">C<img src="https://unavatar.io/twitter/_catwu?fallback=false" alt="Cat Wu 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Cat Wu</div><div class="handle">@_catwu</div></div></div>
       <div class="tags"><span class="tag">Anthropic</span><span class="tag">Claude Code 团队</span></div>
             <p>Claude Code 团队的产品工程师。</p>
@@ -218,7 +219,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">R<img src="https://unavatar.io/twitter/ryolu_?fallback=false" alt="Ryo Lu 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">R<img src="https://unavatar.io/twitter/ryolu_?fallback=false" alt="Ryo Lu 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Ryo Lu</div><div class="handle">@ryolu_</div></div></div>
       <div class="tags"><span class="tag">Anthropic</span><span class="tag">Claude Code 产品负责人</span></div>
             <p>Claude Code 产品方向的负责人。</p>
@@ -228,7 +229,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">T<img src="avatars/trq212.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/trq212?fallback=false'" alt="Thariq 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">T<img src="avatars/trq212.png" data-fallback-src="https://unavatar.io/twitter/trq212?fallback=false" alt="Thariq 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Thariq</div><div class="handle">@trq212</div></div></div>
       <div class="tags"><span class="tag">Anthropic</span><span class="tag">前 YC W20</span><span class="tag">MIT 媒体实验室</span></div>
             <p>Claude Code 团队成员，此前经历 YC 创业、South Park Commons、MIT 媒体实验室。</p>
@@ -238,7 +239,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">C<img src="https://unavatar.io/twitter/claudeai?fallback=false" alt="Claude 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">C<img src="https://unavatar.io/twitter/claudeai?fallback=false" alt="Claude 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Claude（官方）</div><div class="handle">@claudeai</div></div></div>
       <div class="tags"><span class="tag">官方账号</span></div>
             <p>Anthropic 官方账号，产品发布与能力上新的一手渠道。</p>
@@ -249,7 +250,7 @@
   <h3 class="group" id="g-bigtech">🟢 OpenAI / Google 阵营</h3>
   <div class="cards">
     <div class="card">
-      <div class="head"><div class="avatar">S<img src="https://unavatar.io/twitter/sama?fallback=false" alt="Sam Altman 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">S<img src="https://unavatar.io/twitter/sama?fallback=false" alt="Sam Altman 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Sam Altman</div><div class="handle">@sama</div></div></div>
       <div class="tags"><span class="tag">OpenAI CEO</span><span class="tag">前 YC 总裁</span></div>
             <p>2019 年起执掌 OpenAI，这一轮 AI 浪潮最核心的操盘者之一。</p>
@@ -259,7 +260,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">T<img src="https://unavatar.io/twitter/thsottiaux?fallback=false" alt="Thibault Sottiaux 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">T<img src="https://unavatar.io/twitter/thsottiaux?fallback=false" alt="Thibault Sottiaux 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Thibault Sottiaux</div><div class="handle">@thsottiaux</div></div></div>
       <div class="tags"><span class="tag">OpenAI Codex 工程负责人</span><span class="tag">前 Google 搜索基础设施</span></div>
             <p>在 Google 搜索基础设施深耕多年，现领导 OpenAI Codex 工程。</p>
@@ -269,7 +270,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">J<img src="https://unavatar.io/twitter/joshwoodward?fallback=false" alt="Josh Woodward 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">J<img src="https://unavatar.io/twitter/joshwoodward?fallback=false" alt="Josh Woodward 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Josh Woodward</div><div class="handle">@joshwoodward</div></div></div>
       <div class="tags"><span class="tag">Google Labs 副总裁</span><span class="tag">Gemini 应用 / AI Studio</span></div>
             <p>Google 消费级 AI 产品线实权负责人。</p>
@@ -279,7 +280,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">G<img src="https://unavatar.io/twitter/GoogleLabs?fallback=false" alt="Google Labs 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">G<img src="https://unavatar.io/twitter/GoogleLabs?fallback=false" alt="Google Labs 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Google Labs</div><div class="handle">@GoogleLabs</div></div></div>
       <div class="tags"><span class="tag">官方账号</span></div>
             <p>Google 实验部门官方账号（NotebookLM、Jules、Flow 等）。</p>
@@ -290,7 +291,7 @@
   <h3 class="group" id="g-tooling">🛠 编程工具掌门人</h3>
   <div class="cards">
     <div class="card">
-      <div class="head"><div class="avatar">A<img src="avatars/amasad.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/amasad?fallback=false'" alt="Amjad Masad 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">A<img src="avatars/amasad.png" data-fallback-src="https://unavatar.io/twitter/amasad?fallback=false" alt="Amjad Masad 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Amjad Masad</div><div class="handle">@amasad</div></div></div>
       <div class="tags"><span class="tag">Replit CEO / 联合创始人</span></div>
             <p>早年参与 Codecademy 与 Hacker News 基础设施，2016 年创办 Replit。</p>
@@ -300,7 +301,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">G<img src="avatars/rauchg.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/rauchg?fallback=false'" alt="Guillermo Rauch 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">G<img src="avatars/rauchg.png" data-fallback-src="https://unavatar.io/twitter/rauchg?fallback=false" alt="Guillermo Rauch 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Guillermo Rauch</div><div class="handle">@rauchg</div></div></div>
       <div class="tags"><span class="tag">Vercel CEO</span><span class="tag">Next.js 作者</span></div>
             <p>开源明星：写了百万开发者在用的 Next.js，2015 年创办 Vercel。</p>
@@ -310,7 +311,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">P<img src="avatars/steipete.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/steipete?fallback=false'" alt="Peter Steinberger 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">P<img src="avatars/steipete.png" data-fallback-src="https://unavatar.io/twitter/steipete?fallback=false" alt="Peter Steinberger 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Peter Steinberger</div><div class="handle">@steipete</div></div></div>
       <div class="tags"><span class="tag">PSPDFKit 创始人</span><span class="tag">OpenClaw 作者</span></div>
             <p>iOS 场标志性人物，创办 PSPDFKit 做到行业第一；"退休"后杀回 AI 领域。</p>
@@ -323,7 +324,7 @@
   <h3 class="group" id="g-investors">💼 投资人与企业掌门人</h3>
   <div class="cards">
     <div class="card">
-      <div class="head"><div class="avatar">A<img src="https://unavatar.io/twitter/levie?fallback=false" alt="Aaron Levie 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/twitter/levie?fallback=false" alt="Aaron Levie 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Aaron Levie</div><div class="handle">@levie</div></div></div>
       <div class="tags"><span class="tag">Box CEO / 联合创始人</span></div>
             <p>2005 年辍学创办 Box，企业软件圈服役最久的 CEO 之一。</p>
@@ -333,7 +334,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">G<img src="avatars/garrytan.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/garrytan?fallback=false'" alt="Garry Tan 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">G<img src="avatars/garrytan.png" data-fallback-src="https://unavatar.io/twitter/garrytan?fallback=false" alt="Garry Tan 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Garry Tan</div><div class="handle">@garrytan</div></div></div>
       <div class="tags"><span class="tag">Y Combinator 总裁</span><span class="tag">Initialized 联合创始人</span></div>
             <p>工程师 + 设计师双栖：Posterous 联合创始人、Initialized 顶级天使基金联合创始人，2023 年起执掌 YC。</p>
@@ -343,7 +344,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">M<img src="avatars/mattturck.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/mattturck?fallback=false'" alt="Matt Turck 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">M<img src="avatars/mattturck.png" data-fallback-src="https://unavatar.io/twitter/mattturck?fallback=false" alt="Matt Turck 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Matt Turck</div><div class="handle">@mattturck</div></div></div>
       <div class="tags"><span class="tag">FirstMark 合伙人</span><span class="tag">MAD Podcast 主持</span></div>
             <p>数据/AI 投资老兵，Data Driven NYC 创办人、《MAD Landscape》作者。</p>
@@ -353,7 +354,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">N<img src="https://unavatar.io/twitter/nikunj?fallback=false" alt="Nikunj Kothari 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">N<img src="https://unavatar.io/twitter/nikunj?fallback=false" alt="Nikunj Kothari 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Nikunj Kothari</div><div class="handle">@nikunj</div></div></div>
       <div class="tags"><span class="tag">FPV Ventures 合伙人</span><span class="tag">前 Khosla Ventures</span></div>
             <p>电子工程出身，Meter / Opendoor / Shyp / LinkedIn 等公司早期产品成员，后转投资。</p>
@@ -363,7 +364,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">A<img src="avatars/adityaag.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/adityaag?fallback=false'" alt="Aditya Agarwal 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">A<img src="avatars/adityaag.png" data-fallback-src="https://unavatar.io/twitter/adityaag?fallback=false" alt="Aditya Agarwal 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Aditya Agarwal</div><div class="handle">@adityaag</div></div></div>
       <div class="tags"><span class="tag">South Park Commons 合伙人</span><span class="tag">前 Dropbox CTO</span></div>
             <p>Facebook 早期工程师、Dropbox CTO、Flipkart 董事，现 SPC 普通合伙人，Bevel Health 联合创始人。</p>
@@ -376,7 +377,7 @@
   <h3 class="group" id="g-content">✍️ 内容、教育与产品实践者</h3>
   <div class="cards">
     <div class="card">
-      <div class="head"><div class="avatar">D<img src="https://unavatar.io/twitter/danshipper?fallback=false" alt="Dan Shipper 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">D<img src="https://unavatar.io/twitter/danshipper?fallback=false" alt="Dan Shipper 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Dan Shipper</div><div class="handle">@danshipper</div></div></div>
       <div class="tags"><span class="tag">Every CEO</span><span class="tag">AI & I 播客主持</span></div>
             <p>作家出身的创业者，创办 AI 订阅媒体 Every。</p>
@@ -386,7 +387,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">P<img src="avatars/petergyang.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/petergyang?fallback=false'" alt="Peter Yang 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">P<img src="avatars/petergyang.png" data-fallback-src="https://unavatar.io/twitter/petergyang?fallback=false" alt="Peter Yang 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Peter Yang</div><div class="handle">@petergyang</div></div></div>
       <div class="tags"><span class="tag">前 Roblox 产品总监</span><span class="tag">AI 教育创作者</span></div>
             <p>历任 Roblox 产品总监、AWS 首席产品经理，现全职做 AI 内容。</p>
@@ -396,7 +397,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">N<img src="avatars/thenanyu.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/thenanyu?fallback=false'" alt="Nan Yu 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">N<img src="avatars/thenanyu.png" data-fallback-src="https://unavatar.io/twitter/thenanyu?fallback=false" alt="Nan Yu 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Nan Yu</div><div class="handle">@thenanyu</div></div></div>
       <div class="tags"><span class="tag">前 Notion 产品负责人</span></div>
             <p>长期担任 Notion 产品负责人，亲历 Notion AI 早期探索。</p>
@@ -406,7 +407,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">Z<img src="avatars/zarazhangrui.png" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/zarazhangrui?fallback=false'" alt="Zara Zhang 头像" loading="lazy" referrerpolicy="no-referrer"></div>
+      <div class="head"><div class="avatar">Z<img src="avatars/zarazhangrui.png" data-fallback-src="https://unavatar.io/twitter/zarazhangrui?fallback=false" alt="Zara Zhang 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Zara Zhang</div><div class="handle">@zarazhangrui</div></div></div>
       <div class="tags"><span class="tag">上游 skill 作者</span><span class="tag">独立 AI 开发者</span><span class="tag">Harvard '17</span></div>
             <p>常驻加州的华人独立开发者，自述"至今不会手写一行代码"，全部作品用 AI 编程智能体完成。</p>
@@ -416,7 +417,7 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="avatar">M<img src="https://unavatar.io/twitter/realmadhuguru?fallback=false" alt="Madhu Guru 头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
+      <div class="head"><div class="avatar">M<img src="https://unavatar.io/twitter/realmadhuguru?fallback=false" alt="Madhu Guru 头像" loading="lazy" referrerpolicy="no-referrer"></div>
         <div class="who"><div class="name">Madhu Guru</div><div class="handle">@realmadhuguru</div></div></div>
       <div class="tags"><span class="tag">Meta AI 高级总监</span><span class="tag">前 Google</span></div>
             <p>Sr Director, AI at Meta; Prev: Google。大厂 AI 一线管理者。</p>
@@ -430,37 +431,37 @@
   <p class="section-desc">覆盖研究、投资到工程实践的全谱系；app 会自动抓取新单集的完整转录。</p>
   <div class="cards">
     <div class="card podcast">
-      <div class="head"><div class="avatar">L<img src="https://unavatar.io/youtube/LatentSpacePod?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Latent Space</div><div class="handle">swyx & Alessio Fanelli</div></div></div>
+      <div class="head"><div class="avatar">L<img src="https://unavatar.io/youtube/LatentSpacePod?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer"></div><div class="who"><div class="name">Latent Space</div><div class="handle">swyx & Alessio Fanelli</div></div></div>
       <div class="tags"><span class="tag">AI 工程师第一播客</span></div>
       <p>一线 AI 工程师与创业者访谈，同名 newsletter 与 AI Engineer 峰会是行业节点。</p>
       <div class="why"><b>听点：</b>技术判断最锐利。</div>
     </div>
     <div class="card podcast">
-      <div class="head"><div class="avatar">T<img src="https://unavatar.io/youtube/sequoiacapital?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Training Data</div><div class="handle">红杉资本</div></div></div>
+      <div class="head"><div class="avatar">T<img src="https://unavatar.io/youtube/sequoiacapital?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer"></div><div class="who"><div class="name">Training Data</div><div class="handle">红杉资本</div></div></div>
       <div class="tags"><span class="tag">顶级 VC 官方播客</span></div>
       <p>红杉 AI 投资团队对话各赛道头部创始人。</p>
       <div class="why"><b>听点：</b>资本视角看 AI 竞争格局。</div>
     </div>
     <div class="card podcast">
-      <div class="head"><div class="avatar">N<img src="https://unavatar.io/youtube/NoPriorsPodcast?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">No Priors</div><div class="handle">Elad Gil & Sarah Guo</div></div></div>
+      <div class="head"><div class="avatar">N<img src="https://unavatar.io/youtube/NoPriorsPodcast?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer"></div><div class="who"><div class="name">No Priors</div><div class="handle">Elad Gil & Sarah Guo</div></div></div>
       <div class="tags"><span class="tag">研究者对谈</span></div>
       <p>顶级阵容（Ilya 等模型缔造者常做客）。</p>
       <div class="why"><b>听点：</b>离"模型真相"最近的播客。</div>
     </div>
     <div class="card podcast">
-      <div class="head"><div class="avatar">U<img src="https://unavatar.io/youtube/RedpointAI?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">Unsupervised Learning</div><div class="handle">Redpoint Ventures</div></div></div>
+      <div class="head"><div class="avatar">U<img src="https://unavatar.io/youtube/RedpointAI?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer"></div><div class="who"><div class="name">Unsupervised Learning</div><div class="handle">Redpoint Ventures</div></div></div>
       <div class="tags"><span class="tag">投资机构 AI 观察</span></div>
       <p>从投资与工程结合的视角追踪 AI 落地。</p>
       <div class="why"><b>听点：</b>信息筛得好、节奏快。</div>
     </div>
     <div class="card podcast">
-      <div class="head"><div class="avatar">M<img src="https://unavatar.io/youtube/DataDrivenNYC?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">The MAD Podcast</div><div class="handle">Matt Turck</div></div></div>
+      <div class="head"><div class="avatar">M<img src="https://unavatar.io/youtube/DataDrivenNYC?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer"></div><div class="who"><div class="name">The MAD Podcast</div><div class="handle">Matt Turck</div></div></div>
       <div class="tags"><span class="tag">数据/AI 老牌节目</span></div>
       <p>企业级 AI 与数据基础设施的深度案例。</p>
       <div class="why"><b>听点：</b>配套年度 MAD 全景图。</div>
     </div>
     <div class="card podcast">
-      <div class="head"><div class="avatar">A<img src="https://unavatar.io/youtube/every_inc?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div><div class="who"><div class="name">AI & I by Every</div><div class="handle">Dan Shipper</div></div></div>
+      <div class="head"><div class="avatar">A<img src="https://unavatar.io/youtube/every_inc?fallback=false" alt="频道头像" loading="lazy" referrerpolicy="no-referrer"></div><div class="who"><div class="name">AI & I by Every</div><div class="handle">Dan Shipper</div></div></div>
       <div class="tags"><span class="tag">"怎么用 AI"实录</span></div>
       <p>每期请一位构建者现场展示自己的 AI 工作流。</p>
       <div class="why"><b>听点：</b>不是聊趋势，是实操演示。</div>
@@ -470,13 +471,13 @@
   <h2 class="section" id="blogs"><span class="n">2</span>官方博客</h2>
   <div class="cards">
     <div class="card blogc">
-      <div class="head"><div class="avatar">A<img src="avatars/claude-logo.jpg" alt="Claude 图标" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/claudeai?fallback=false'"></div><div class="who"><div class="name">Anthropic Engineering</div><div class="handle">anthropic.com/engineering</div></div></div>
+      <div class="head"><div class="avatar">A<img src="avatars/claude-logo.jpg" alt="Claude 图标" loading="lazy" referrerpolicy="no-referrer" data-fallback-src="https://unavatar.io/twitter/claudeai?fallback=false"></div><div class="who"><div class="name">Anthropic Engineering</div><div class="handle">anthropic.com/engineering</div></div></div>
       <div class="tags"><span class="tag">工程实践深文</span></div>
       <p>多智能体系统、Claude Code 内部实现、上下文工程等一线复盘。</p>
       <div class="why"><b>价值：</b>"顶级 AI 公司怎么干活"的一手资料。</div>
     </div>
     <div class="card blogc">
-      <div class="head"><div class="avatar">C<img src="avatars/claude-logo.jpg" alt="Claude 图标" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='https://unavatar.io/twitter/claudeai?fallback=false'"></div><div class="who"><div class="name">Claude Blog</div><div class="handle">claude.com/blog</div></div></div>
+      <div class="head"><div class="avatar">C<img src="avatars/claude-logo.jpg" alt="Claude 图标" loading="lazy" referrerpolicy="no-referrer" data-fallback-src="https://unavatar.io/twitter/claudeai?fallback=false"></div><div class="who"><div class="name">Claude Blog</div><div class="handle">claude.com/blog</div></div></div>
       <div class="tags"><span class="tag">产品发布公告</span></div>
       <p>Claude 新模型、新功能的权威发布渠道。</p>
       <div class="why"><b>价值：</b>Claude 生态的"官方公告栏"。</div>
@@ -487,8 +488,9 @@
 
 <footer>
   <p>名单来源：<a href="https://github.com/zarazhangrui/follow-builders/blob/main/config/default-sources.json" target="_blank" rel="noopener">follow-builders / config / default-sources.json</a>（2026-08）。人物介绍基于公开资料与 feed 内官方 bio 整理；头像通过 unavatar.io 按 X 用户名实时获取。</p>
-  <p>上游项目 MIT 许可；内容版权归原作者，本页面仅为信息整理。</p>
+  <p>网页代码采用 MIT 许可；聚合内容版权归原作者，本页面仅为信息整理。</p>
 </footer>
 
+<script src="about.js"></script>
 </body>
 </html>

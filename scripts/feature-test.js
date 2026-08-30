@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /* 功能点逐项测试（离线确定性）：
- * 用含中文字段的合成数据播种 localStorage + mock digest 接口 → 断言 → PASS/FAIL
+ * 用含中文字段的合成数据播种 localStorage → 断言 → PASS/FAIL
  * 用法: node scripts/feature-test.js [baseURL]
  */
 'use strict';
 const { execFile } = require('child_process');
+const fs = require('fs');
 const http = require('http');
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME_BIN || [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+].find(candidate => fs.existsSync(candidate));
 const CDP_PORT = 9225;
 const BASE = process.argv[2] || 'http://127.0.0.1:8931';
 
@@ -81,17 +86,10 @@ function seedData() {
 }
 
 const seed = seedData();
-const seedJSON = JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() });
-const SEED_SCRIPT = `
-  const realFetch = window.fetch;
-  window.__digestHits = 0;
-  window.fetch = (u, o) => String(u).includes('/digest/')
-    ? (window.__digestHits++, Promise.resolve(new Response(JSON.stringify({ day: 'x', markdown: '## 今日焦点\\n\\n这是 **模拟日报** 内容。' }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
-    : realFetch(u, o);
-`;
 
 let mainChrome = null;
 async function main() {
+  if (!CHROME) throw new Error('未找到 Chrome/Chromium；可通过 CHROME_BIN 指定');
   const profile = '/tmp/fb-feature-profile-' + Date.now();
   const chrome = mainChrome = execFile(CHROME, [
     '--headless=new', '--disable-gpu', '--no-first-run',
@@ -119,7 +117,6 @@ async function main() {
   };
 
   await send('Page.enable');
-  await send('Page.addScriptToEvaluateOnNewDocument', { source: SEED_SCRIPT });
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(1500);
   // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
@@ -260,17 +257,17 @@ async function main() {
   await evalJS(`document.querySelector('#btn-menu').focus();`);
   await evalJS(`document.querySelector('#btn-menu').click();`);
   await wait(300);
-  const opened = await evalJS(`({visible: !document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id})`);
+  const opened = await evalJS(`({visible: !document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id, expanded: document.querySelector('#btn-menu').getAttribute('aria-expanded')})`);
   v = await evalJS(`(() => {
     document.querySelector('#nav-settings').focus();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     return document.activeElement.id;
   })()`);
-  check('T13 侧边栏焦点接管并在末端循环', opened && opened.visible && opened.focus === 'nav-home' && v === 'nav-home', JSON.stringify({ opened, wrapped: v }));
+  check('T13 侧边栏焦点接管并在末端循环', opened && opened.visible && opened.focus === 'nav-home' && opened.expanded === 'true' && v === 'nav-home', JSON.stringify({ opened, wrapped: v }));
   await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`);
   await wait(300);
-  const closed = await evalJS(`({hidden: document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id})`);
-  check('T14 Esc 关闭侧边栏并恢复焦点', closed && closed.hidden && closed.focus === 'btn-menu', JSON.stringify(closed));
+  const closed = await evalJS(`({hidden: document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id, expanded: document.querySelector('#btn-menu').getAttribute('aria-expanded')})`);
+  check('T14 Esc 关闭侧边栏并恢复焦点', closed && closed.hidden && closed.focus === 'btn-menu' && closed.expanded === 'false', JSON.stringify(closed));
 
   const failed = results.filter(r => !r[1]).length;
   console.log(`\n===== 汇总：${results.length - failed}/${results.length} 通过 =====`);

@@ -1121,11 +1121,18 @@ function updateBackfillButton() {
 }
 
 /* ---------- 侧边栏抽屉 ---------- */
-function openDrawer() { showDialog($('#drawer-mask'), $('#nav-home')); }
-function closeDrawer() { hideDialog($('#drawer-mask')); }
+function openDrawer() {
+  $('#btn-menu').setAttribute('aria-expanded', 'true');
+  showDialog($('#drawer-mask'), $('#nav-home'));
+}
+function closeDrawer() {
+  $('#btn-menu').setAttribute('aria-expanded', 'false');
+  hideDialog($('#drawer-mask'));
+}
 
 /* ---------- 设置面板 ---------- */
 function openSettings() {
+  $('#btn-settings').setAttribute('aria-expanded', 'true');
   showDialog($('#settings-mask'), $('#settings-mask').querySelector('button'));
   const mirror = Store.pref.mirror || 'auto';
   for (const b of document.querySelectorAll('#mirror-seg button'))
@@ -1134,7 +1141,10 @@ function openSettings() {
   for (const b of document.querySelectorAll('#depth-seg button'))
     b.classList.toggle('active', b.dataset.depth === depth);
 }
-function closeSettings() { hideDialog($('#settings-mask')); }
+function closeSettings() {
+  $('#btn-settings').setAttribute('aria-expanded', 'false');
+  hideDialog($('#settings-mask'));
+}
 
 /* ---------- 事件绑定 ---------- */
 function bind() {

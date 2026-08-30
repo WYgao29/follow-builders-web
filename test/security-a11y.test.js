@@ -21,11 +21,11 @@ test('dialogs manage focus and trap keyboard navigation', () => {
   assert.match(css, /:focus-visible/);
 });
 
-test('about page images have at most one non-recursive error handler', () => {
+test('about page images use one delegated, two-stage fallback handler', () => {
   const images = about.match(/<img\b[^>]*>/g) || [];
   assert.ok(images.length > 20);
   for (const image of images) {
-    assert.ok((image.match(/\sonerror=/g) || []).length <= 1, image);
-    assert.doesNotMatch(image, /this\.onerror\s*=\s*\(\)\s*=>/);
+    assert.doesNotMatch(image, /\sonerror=/, image);
   }
+  assert.match(about, /<script src="about\.js"><\/script>/);
 });
