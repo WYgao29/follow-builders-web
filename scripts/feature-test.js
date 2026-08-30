@@ -256,14 +256,21 @@ async function main() {
   v = await evalJS(`({posts: DB.posts.size, days: dayKeysCache.length, emptyVisible: !document.querySelector('#empty-state').classList.contains('hidden')})`);
   check('T12b 清空缓存：数据立即清空', v && v.posts === 0 && v.days === 0, JSON.stringify(v));
 
-  // T13 Esc 关闭抽屉（先确认已打开，避免"从未打开→恒隐藏"的假通过）
+  // T13 弹层接管焦点，Esc 关闭后把焦点还给触发按钮。
+  await evalJS(`document.querySelector('#btn-menu').focus();`);
   await evalJS(`document.querySelector('#btn-menu').click();`);
   await wait(300);
-  const opened = await evalJS(`!document.querySelector('#drawer-mask').classList.contains('hidden')`);
+  const opened = await evalJS(`({visible: !document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id})`);
+  v = await evalJS(`(() => {
+    document.querySelector('#nav-settings').focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    return document.activeElement.id;
+  })()`);
+  check('T13 侧边栏焦点接管并在末端循环', opened && opened.visible && opened.focus === 'nav-home' && v === 'nav-home', JSON.stringify({ opened, wrapped: v }));
   await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`);
   await wait(300);
-  const closed = await evalJS(`document.querySelector('#drawer-mask').classList.contains('hidden')`);
-  check('T13 Esc 关闭侧边栏', opened === true && closed === true, `打开=${opened}, 关闭=${closed}`);
+  const closed = await evalJS(`({hidden: document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id})`);
+  check('T14 Esc 关闭侧边栏并恢复焦点', closed && closed.hidden && closed.focus === 'btn-menu', JSON.stringify(closed));
 
   const failed = results.filter(r => !r[1]).length;
   console.log(`\n===== 汇总：${results.length - failed}/${results.length} 通过 =====`);

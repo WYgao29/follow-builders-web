@@ -33,6 +33,11 @@ body {
 button { font-family: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 
+:where(a, button, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 /* ---- 顶栏 ---- */
 .topbar {
   position: sticky; top: 0; z-index: 20;

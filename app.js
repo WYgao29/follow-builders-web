@@ -66,6 +66,43 @@ function safeURL(u) {
   return Core.safeURL(u);
 }
 
+const modalReturnFocus = new WeakMap();
+
+function showDialog(container, focusTarget) {
+  if (container.classList.contains('hidden')) modalReturnFocus.set(container, document.activeElement);
+  container.classList.remove('hidden');
+  requestAnimationFrame(() => focusTarget.focus());
+}
+
+function hideDialog(container) {
+  container.classList.add('hidden');
+  const previous = modalReturnFocus.get(container);
+  modalReturnFocus.delete(container);
+  if (previous && previous.isConnected) previous.focus();
+}
+
+function activeDialog() {
+  if (!$('#reader').classList.contains('hidden')) return $('#reader');
+  if (!$('#settings-mask').classList.contains('hidden')) return $('#settings-mask').querySelector('[role="dialog"]');
+  if (!$('#drawer-mask').classList.contains('hidden')) return $('#drawer-mask').querySelector('[role="dialog"]');
+  return null;
+}
+
+function trapDialogFocus(event) {
+  const dialog = activeDialog();
+  if (!dialog || event.key !== 'Tab') return;
+  const nodes = [...dialog.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(node => !node.classList.contains('hidden'));
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault(); last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault(); first.focus();
+  }
+}
+
 /* ---------- 本地缓存 ---------- */
 const Store = {
   KEY: 'fb.web.v5', // v5：只接受中文数据仓 v2 日分片契约
@@ -815,22 +852,26 @@ function xLogo() {
 function openReader({ kicker, title, url, linkTitle, build }) {
   $('#reader-title').textContent = title;
   const link = $('#reader-link');
-  if (url) {
-    link.href = url;
+  const href = safeURL(url);
+  if (href) {
+    link.href = href;
     link.title = linkTitle || '打开原文';
     link.classList.remove('hidden');
-  } else link.classList.add('hidden');
+  } else {
+    link.removeAttribute('href');
+    link.classList.add('hidden');
+  }
   const body = $('#reader-body');
   body.textContent = '';
   body.scrollTop = 0;
   if (kicker) body.appendChild(el('p', 'rb-kicker', kicker));
   body.appendChild(el('div', 'rb-title', title));
   build(body);
-  $('#reader').classList.remove('hidden');
+  showDialog($('#reader'), $('#reader-close'));
   document.body.style.overflow = 'hidden';
 }
 function closeReader() {
-  $('#reader').classList.add('hidden');
+  hideDialog($('#reader'));
   document.body.style.overflow = '';
 }
 
@@ -862,11 +903,13 @@ function openBlogReader(b) {
       body.insertBefore(t, body.children[2] || null);
     }
   };
-  $('#reader-link').classList.toggle('hidden', !b.url);
-  if (b.url) { $('#reader-link').href = safeURL(b.url) || ''; $('#reader-link').title = '访问原文'; }
+  const href = safeURL(b.url);
+  $('#reader-link').classList.toggle('hidden', !href);
+  if (href) { $('#reader-link').href = href; $('#reader-link').title = '访问原文'; }
+  else $('#reader-link').removeAttribute('href');
   currentReaderReopen = () => openBlogReader(b);
   paint();
-  $('#reader').classList.remove('hidden');
+  showDialog($('#reader'), $('#reader-close'));
   document.body.style.overflow = 'hidden';
 }
 
@@ -1078,12 +1121,12 @@ function updateBackfillButton() {
 }
 
 /* ---------- 侧边栏抽屉 ---------- */
-function openDrawer() { $('#drawer-mask').classList.remove('hidden'); }
-function closeDrawer() { $('#drawer-mask').classList.add('hidden'); }
+function openDrawer() { showDialog($('#drawer-mask'), $('#nav-home')); }
+function closeDrawer() { hideDialog($('#drawer-mask')); }
 
 /* ---------- 设置面板 ---------- */
 function openSettings() {
-  $('#settings-mask').classList.remove('hidden');
+  showDialog($('#settings-mask'), $('#settings-mask').querySelector('button'));
   const mirror = Store.pref.mirror || 'auto';
   for (const b of document.querySelectorAll('#mirror-seg button'))
     b.classList.toggle('active', b.dataset.mirror === mirror);
@@ -1091,7 +1134,7 @@ function openSettings() {
   for (const b of document.querySelectorAll('#depth-seg button'))
     b.classList.toggle('active', b.dataset.depth === depth);
 }
-function closeSettings() { $('#settings-mask').classList.add('hidden'); }
+function closeSettings() { hideDialog($('#settings-mask')); }
 
 /* ---------- 事件绑定 ---------- */
 function bind() {
@@ -1203,6 +1246,7 @@ function bind() {
 
   // Esc 依次关闭阅读器 / 设置 / 侧边栏
   document.addEventListener('keydown', (e) => {
+    trapDialogFocus(e);
     if (e.key !== 'Escape') return;
     if (!$('#reader').classList.contains('hidden')) closeReader();
     else if (!$('#settings-mask').classList.contains('hidden')) closeSettings();
