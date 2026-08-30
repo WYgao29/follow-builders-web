@@ -63,6 +63,16 @@ async function main() {
   };
 
   await send('Page.enable');
+  await send('Runtime.enable');
+  await send('Log.enable');
+  const pageErrors = [];
+  ws.addEventListener('message', (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.method === 'Runtime.exceptionThrown')
+      pageErrors.push(((m.params.exceptionDetails.exception || {}).description || JSON.stringify(m.params.exceptionDetails)).slice(0, 200));
+    if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error')
+      pageErrors.push(m.params.entry.text.slice(0, 160));
+  });
   await send('Page.navigate', { url });
   await sleep(1500);
 
@@ -76,6 +86,7 @@ async function main() {
     if (err && /失败/.test(err)) { console.error('页面报错: ' + err); }
   }
   console.log('rendered:', rendered);
+  if (pageErrors.length) console.log('PAGE-ERRORS:', JSON.stringify(pageErrors).slice(0, 800));
 
   if (Number(scrollY) > 0) {
     await evalJS(`window.scrollTo(0, ${Number(scrollY)})`);
@@ -90,7 +101,9 @@ async function main() {
   console.log('saved:', out);
 
   // 顺便输出页面上的诊断信息
-  const diag = await evalJS(`JSON.stringify({
+  let diag = null;
+  try {
+    diag = await evalJS(`JSON.stringify({
     days: document.querySelectorAll('.day-section').length,
     chips: document.querySelectorAll('.chip').length,
     tweets: document.querySelectorAll('.tweet-card').length,
@@ -99,8 +112,9 @@ async function main() {
     backfillBtnVisible: !document.querySelector('#btn-backfill').classList.contains('hidden'),
     syncVisible: !document.querySelector('#sync-banner').classList.contains('hidden'),
     syncText: document.querySelector('#sync-text').textContent,
-    errors: window.__errors || null,
+    errors: pageErrors.length ? pageErrors : null,
   })`);
+  } catch (e) { diag = 'DIAG-EVAL-ERR: ' + e.message; }
   console.log('DIAG:', diag);
 
   ws.close();

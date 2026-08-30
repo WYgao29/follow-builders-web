@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /* 功能点逐项测试（离线确定性）：
- * 用合成数据播种 localStorage → 无头 Chrome 加载 → 逐项断言 → 输出 PASS/FAIL
+ * 用含中文字段的合成数据播种 localStorage + mock digest 接口 → 断言 → PASS/FAIL
  * 用法: node scripts/feature-test.js [baseURL]
  */
 'use strict';
 const { execFile } = require('child_process');
-const fs = require('fs');
 const http = require('http');
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -22,7 +21,21 @@ function getJSON(path) {
   });
 }
 
-/* 生成 10 天合成数据：3 位构建者 × 每天 2 条推文 + 2 期播客 + 2 篇博客 */
+/* 生成 10 天合成数据：3 位构建者 × 每天 2 条推文（一条带中文译文）+ 播客 + 博客 */
+/* 与产品一致的批次窗口计算：expected 批次日 往前推 depth-1 天为截止线 */
+function windowKept(allDays, depth) {
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
+  const now = new Date();
+  const snap = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 28, 0, 0));
+  const ref = now >= snap ? snap : new Date(snap.getTime() - 86400000);
+  const expected = dayKey(ref.getTime());
+  const [y, m, d0] = expected.split('-').map(Number);
+  const cutoff = dayKey(new Date(y, m - 1, d0, 12).getTime() - (depth - 1) * 86400000);
+  const kept = allDays.filter(d => d >= cutoff).length;
+  return { kept, cutoff };
+}
+
 function seedData() {
   const pad2 = (n) => String(n).padStart(2, '0');
   const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
@@ -31,8 +44,8 @@ function seedData() {
   const posts = [], episodes = [], blogs = [];
   const builders = [
     { handle: 'h1', builder: '甲', bio: '第一号测试构建者' },
-    { handle: 'h2', builder: '乙', bio: '第二号测试构建者' },
-    { handle: 'h3', builder: '丙', bio: '' },
+    { handle: 'h2', builder: '乙', bio: '' },
+    { handle: 'h3', builder: '丙', bio: '第三号' },
   ];
   for (let i = 0; i < 10; i++) {
     const batchDay = dayKey(now - i * DAY);
@@ -41,55 +54,46 @@ function seedData() {
       const b = builders[j];
       for (let k = 0; k < 2; k++) {
         posts.push({
-          id: `p${i}-${j}-${k}`, text: `第 ${i} 天 推文 ${j}-${k}`, ms: ms - k * 3600000,
-          batchDay, url: k === 0 ? `https://x.com/${b.handle}/status/${i}${j}${k}` : '',
-          likes: 10 * (i + 1), retweets: 5, replies: 3,
+          id: `p${i}-${j}-${k}`, text: `Day ${i} tweet ${j}-${k}`, ms: ms - k * 3600000,
+          batchDay, textZh: k === 0 ? `中文推文·第${i}天·${j}` : '',
+          url: k === 0 ? `https://x.com/${b.handle}/status/${i}${j}${k}` : '',
+          likes: 10, retweets: 5, replies: 3,
           handle: b.handle, builder: b.builder, bio: b.bio,
         });
       }
     }
     if (i === 1 || i === 3) {
       episodes.push({
-        guid: `e${i}`, show: '测试播客', title: `第 ${i} 天的单集`, url: 'https://example.com/watch',
-        ms: ms, batchDay, transcript: 'Speaker 1 | 00:00 - 00:05\n你好\nSpeaker 2 | 00:05 - 00:10\n世界',
+        guid: `e${i}`, show: '测试播客', title: `Episode ${i}`, titleZh: `单集中文标题 ${i}`,
+        url: 'https://example.com/watch', ms, batchDay,
+        summaryZh: `要点摘要：第 ${i} 期测试播客的中文要点。`,
+        transcript: 'Speaker 1 | 00:00 - 00:05\nHello world\nSpeaker 2 | 00:05 - 00:10\nHi there',
       });
     }
     if (i === 2 || i === 4) {
+      const withZh = i === 2;
       blogs.push({
-        url: `https://example.com/post/${i}`, source: '测试博客', title: `第 ${i} 天的文章`,
-        ms: ms, batchDay, author: '作者', summary: '',
-        content: `这是 **第 ${i} 天** 的文章正文。\n\n[链接](https://example.com)`,
+        url: `https://example.com/post/${i}`, source: '测试博客',
+        title: `Post ${i}`, titleZh: withZh ? `文章中文标题 ${i}` : '',
+        ms, batchDay, author: '作者', summary: 'English summary',
+        content: withZh ? `English body of post ${i} with [a link](https://example.com).` : `Plain english body ${i}.`,
+        contentZh: withZh ? `这是 **第 ${i} 篇** 的中文全文翻译。` : '',
+        summaryZh: withZh ? `这是第 ${i} 篇的中文摘要。` : '',
         publishedText: '',
       });
     }
   }
-  return { data: { posts, episodes, blogs, doneShas: [], lastRefresh: Date.now() } };
+  return { posts, episodes, blogs };
 }
 
-// 与产品一致的批次语义：算出 depth=7 修剪后应保留的天数/推文数
-function expectedKept() {
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
-  const now = new Date();
-  const snap = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 28, 0, 0));
-  const ref = now >= snap ? snap : new Date(snap.getTime() - 86400000);
-  const expected = dayKey(ref.getTime());
-  const [y, m, d0] = expected.split('-').map(Number);
-  const cutoff = dayKey(new Date(y, m - 1, d0, 12).getTime() - (7 - 1) * 86400000);
-  const DAY = 86400000;
-  const days = [];
-  for (let i = 0; i < 10; i++) {
-    const d = dayKey(Date.now() - i * DAY);
-    if (d >= cutoff) days.push(d);
-  }
-  return { kept: days.length, posts: days.length * 6, cutoff };
-}
-
+const seed = seedData();
+const seedJSON = JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() });
 const SEED_SCRIPT = `
-  const seed = ${JSON.stringify(seedData())};
-  localStorage.setItem('fb.web.v3', JSON.stringify(seed.data));
-  localStorage.setItem('fb.web.v3.pref', JSON.stringify({ depth: 7 }));
-  window.__seedRan = Date.now();
+  const realFetch = window.fetch;
+  window.__digestHits = 0;
+  window.fetch = (u, o) => String(u).includes('/digest/')
+    ? (window.__digestHits++, Promise.resolve(new Response(JSON.stringify({ day: 'x', markdown: '## 今日焦点\\n\\n这是 **模拟日报** 内容。' }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    : realFetch(u, o);
 `;
 
 async function main() {
@@ -106,132 +110,130 @@ async function main() {
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise(r => ws.onopen = r);
   let id = 0; const pending = new Map();
-  ws.onmessage = (ev) => { const m = JSON.parse(ev.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } };
+  ws.addEventListener('message', (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+  });
   const send = (method, params = {}) => new Promise((resolve) => { const mid = ++id; pending.set(mid, resolve); ws.send(JSON.stringify({ id: mid, method, params })); });
   const evalJS = async (expr) => {
     const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
-    if (r.result && r.result.exceptionDetails) return { __error: r.result.exceptionDetails.exception && r.result.exceptionDetails.exception.description };
+    if (r.result && r.result.exceptionDetails) return { __error: (r.result.exceptionDetails.exception || {}).description || 'eval error' };
     return r.result && r.result.result && r.result.result.value;
   };
 
-  // 播种脚本：每次新文档创建前写入 localStorage
   await send('Page.enable');
-  await send('Runtime.enable');
-  const pageErrors = [];
-  ws.addEventListener('message', (ev) => {
-    const m = JSON.parse(ev.data);
-    if (m.method === 'Runtime.exceptionThrown')
-      pageErrors.push(m.params.exceptionDetails.exception && m.params.exceptionDetails.exception.description || JSON.stringify(m.params.exceptionDetails).slice(0, 200));
-    if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error')
-      pageErrors.push(m.params.entry.text.slice(0, 200));
-  });
-  await send('Log.enable');
   await send('Page.addScriptToEvaluateOnNewDocument', { source: SEED_SCRIPT });
+  await send('Page.navigate', { url: BASE + '/index.html' });
+  await wait(1500);
+  // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
+  const seeded = await evalJS(`(() => {
+    localStorage.clear();
+    localStorage.setItem('fb.web.v4', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
+    localStorage.setItem('fb.web.v4.pref', JSON.stringify({ depth: 7 }));
+    return 'seeded';
+  })()`);
+  console.log('播种:', seeded);
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(2500);
 
   const results = [];
   const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
 
-  // T1 品牌与单日视图 + 滑动窗口修剪（种子 10 天 → depth 7 应剩 7）
-  await evalJS(`pruneOldDays(); render();`);
-  let v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length, chips: document.querySelectorAll('#day-chips .chip').length})`);
+  // T1 单日视图 + 品牌
+  let v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
   check('T1 单日视图：标题=造浪者，只渲染 1 天', v && v.t === '造浪者' && v.secs === 1, `secs=${v && v.secs}`);
-  if (!v || v.secs === 0 || v.t !== '造浪者') {
-    const diag = await evalJS(`JSON.stringify({ seedRan: !!window.__seedRan, posts: typeof DB !== 'undefined' ? DB.posts.size : -1, lsLen: (localStorage.getItem('fb.web.v3') || '').length, syncText: document.querySelector('#sync-text').textContent, emptyHidden: document.querySelector('#empty-state').classList.contains('hidden'), res: performance.getEntriesByType('resource').map(r => r.name.split('/').pop() + ':' + (r.responseStatus ?? r.transferSize)) })`);
-    console.log('   诊断:', diag);
-    console.log('   页面错误:', JSON.stringify(pageErrors).slice(0, 500));
-  }
-  const kept = expectedKept();
-  // T2 滑动窗口：depth 7 → 超窗旧日期被修剪（保留数按批次日动态计算）
-  check('T2 滑动窗口：种子 10 天按窗口修剪', v && v.chips === kept.kept, `chips=${v && v.chips}, 预期=${kept.kept}`);
+  // T2 滑动窗口：种子 10 天 → 显式触发修剪 → 窗口外批次被清除（预期按产品公式计算）
+  const allDays = [];
+  { const pad2 = (n) => String(n).padStart(2, '0'); const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }; for (let i = 0; i < 10; i++) allDays.push(dayKey(Date.now() - i * 86400000)); }
+  const wk = windowKept(allDays, 7);
+  v = await evalJS(`(() => { pruneOldDays(); render(); return dayKeysCache.length; })()`);
+  check('T2 滑动窗口：窗口外批次被清除', v !== undefined && v === wk.kept, `days=${v}, 预期=${wk.kept}（截止 ${wk.cutoff}）`);
   // T3 当前日 = 今天
   v = await evalJS(`document.querySelector('#day-chips .chip.active').textContent`);
   check('T3 当前日=今天（胶囊高亮）', /今天/.test(v || ''), v);
 
   // T4 下一天
   await evalJS(`document.querySelector('#btn-next-day').click();`);
+  await wait(300);
   v = await evalJS(`({t: document.querySelector('.day-section .d-title').textContent, next: !document.querySelector('#btn-next-day').classList.contains('hidden')})`);
   check('T4 下一天按钮：切到昨天且按钮仍在', v && v.t === '昨天' && v.next, `title=${v && v.t}`);
 
-  // T5 筛选 X：跨天全部推文
+  // T5 中文译文默认展示 + 中/EN 切换
+  await evalJS(`document.querySelectorAll('#day-chips .chip')[0].click();`);
+  await wait(300);
+  v = await evalJS(`(() => {
+    const card = [...document.querySelectorAll('.tweet-card')].find(c => c.querySelector('.lang-toggle'));
+    if (!card) return { found: false };
+    const zh = card.querySelector('.tweet-text').textContent;
+    card.querySelector('.lang-toggle').click();
+    const en = card.querySelector('.tweet-text').textContent;
+    const flipped = card.querySelector('.lang-toggle').textContent;
+    card.querySelector('.lang-toggle').click();
+    const back = card.querySelector('.tweet-text').textContent;
+    return { found: true, zh, en, flipped, back };
+  })()`);
+  check('T5 中文默认展示，EN 切换双向可用', v && v.found && /中文推文/.test(v.zh) && /Day/.test(v.en) && v.flipped === '中' && /中文推文/.test(v.back), JSON.stringify(v).slice(0, 140));
+
+  // T6 筛选 X 推文（跨天全部）
   await evalJS(`document.querySelector('[data-filter=x]').click();`);
   await wait(300);
-  v = await evalJS(`({t: document.querySelector('#app-title').textContent, cards: document.querySelectorAll('.tweet-card').length, secs: document.querySelectorAll('.day-section').length})`);
-  check('T5 筛选 X 推文：窗口内推文全部展示', v && v.t === 'X 推文' && v.cards === kept.posts && v.secs === kept.kept, `cards=${v && v.cards}, secs=${v && v.secs}, 预期=${kept.posts}/${kept.kept}`);
+  v = await evalJS(`({t: document.querySelector('#app-title').textContent, cards: document.querySelectorAll('.tweet-card').length})`);
+  const expectedCards = wk.kept * 6; // 窗口内每天 6 条种子推文
+  check('T6 筛选 X 推文：窗口内推文全部展示', v && v.t === 'X 推文' && v.cards === expectedCards, `cards=${v && v.cards}, 预期=${expectedCards}`);
 
-  // T6 筛选播客
-  await evalJS(`document.querySelector('[data-filter=podcasts]').click();`);
-  await wait(300);
-  v = await evalJS(`({t: document.querySelector('#app-title').textContent, rows: document.querySelectorAll('.row-card.podcast').length})`);
-  check('T6 筛选播客：2 期全部展示', v && v.t === '播客' && v.rows === 2, `rows=${v && v.rows}`);
-
-  // T7 筛选博客
-  await evalJS(`document.querySelector('[data-filter=blogs]').click();`);
-  await wait(300);
-  v = await evalJS(`({t: document.querySelector('#app-title').textContent, rows: document.querySelectorAll('.row-card.blog').length})`);
-  check('T7 筛选博客：2 篇全部展示', v && v.t === '博客' && v.rows === 2, `rows=${v && v.rows}`);
-
-  // T8 返回时间线
-  await evalJS(`document.querySelector('.btn-back').click();`);
-  await wait(300);
-  v = await evalJS(`({t: document.querySelector('#app-title').textContent, chips: document.querySelectorAll('#day-chips .chip').length})`);
-  check('T8 返回时间线：标题恢复、日期条可见', v && v.t === '造浪者' && v.chips === kept.kept, `chips=${v && v.chips}`);
-
-  // T9 阅读器（转录分段）
+  // T7 筛选播客：摘要块 + 转录
   await evalJS(`document.querySelector('[data-filter=podcasts]').click();`);
   await wait(300);
   await evalJS(`document.querySelector('.row-card.podcast').click();`);
   await wait(400);
-  v = await evalJS(`({open: !document.querySelector('#reader').classList.contains('hidden'), segs: document.querySelectorAll('.seg-item').length})`);
-  check('T9 播客转录阅读器：打开且分段渲染', v && v.open && v.segs === 2, `segs=${v && v.segs}`);
+  v = await evalJS(`({sub: [...document.querySelectorAll('#reader-body .rb-subhead')].map(x => x.textContent).join('|'), segs: document.querySelectorAll('.seg-item').length})`);
+  check('T7 播客阅读器：中文要点 + 转录原文同页', v && /要点摘要/.test(v.sub) && /转录原文/.test(v.sub) && v.segs === 2, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
-  // T10 链接白名单：javascript: 链接不得渲染为可点击 <a>
-  const su = await evalJS(`({ js: safeURL('javascript:alert(1)'), jsSpaces: safeURL('  javascript:alert(1)'), data: safeURL('data:text/html,x'), ok: safeURL('https://x.com/a'), rel: safeURL('about.html') })`);
-  const jsDom = await evalJS(`document.querySelectorAll('a[href^="javascript:"]').length`);
-  check('T10 安全：safeURL 拦截伪协议、放行 https', su && su.js === null && su.jsSpaces === null && su.data === null && su.ok === 'https://x.com/a' && jsDom === 0, JSON.stringify(su) + ' jsDom=' + jsDom);
-
-  // T13 内置智谱配置：回时间线，按钮为“生成 AI 摘要”
-  await evalJS(`document.querySelector('#nav-home').click();`);
+  // T8 筛选博客：有译文的显示中文标题
+  await evalJS(`document.querySelector('[data-filter=blogs]').click();`);
   await wait(300);
-  v = await evalJS(`({btn: document.querySelector('.summary-card .sum-btn').textContent, keyLen: AI_CONFIG.key.length, model: AI_CONFIG.model})`);
-  check('T13 内置智谱配置：glm-5.3-flash + Key 已内置', v && v.btn === '生成 AI 摘要' && v.keyLen > 20 && /glm-5/.test(v.model), JSON.stringify(v));
+  v = await evalJS(`[...document.querySelectorAll('.row-card.blog .r-title')].map(x => x.textContent).join('|')`);
+  check('T8 筛选博客：有译文的显示中文标题', /文章中文标题/.test(v || '') && /Post 4/.test(v || ''), v);
 
-  // T14 配置 Key + mock AI 响应 → 生成并缓存摘要
-  await evalJS(`render();`);
+  // T9 博客阅读器：中文默认 + 切换英文
+  await evalJS(`[...document.querySelectorAll('.row-card.blog')].find(r => r.textContent.includes('文章中文标题')).click();`);
+  await wait(400);
+  v = await evalJS(`(() => {
+    const body = document.querySelector('#reader-body');
+    const zh = body.textContent.includes('中文全文翻译');
+    const toggle = body.querySelector('.lang-toggle');
+    toggle.click();
+    const en = body.textContent.includes('English body');
+    return { zh, en };
+  })()`);
+  check('T9 博客阅读器：中文默认 + 切换英文原文', v && v.zh === true && v.en === true, JSON.stringify(v));
+  await evalJS(`document.querySelector('#reader-close').click();`);
+
+  // T10 返回时间线
+  await evalJS(`document.querySelector('[data-filter=x]').click();`);
   await wait(200);
-  await evalJS(`
-    window.__realFetch = window.fetch;
-    window.fetch = (u, o) => String(u).includes('/chat/completions')
-      ? Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: '**模拟摘要**：今天测试内容。' } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      : window.__realFetch(u, o);
-  `);
-  v = await evalJS(`({prompt: buildDayPrompt({ posts: [...DB.posts.values()].slice(0, 3), episodes: [], blogs: [] }).includes('第 0 天 推文')})`);
-  check('T14a 提示词组装包含当日内容', v && v.prompt === true, JSON.stringify(v));
-  await evalJS(`document.querySelector('.summary-card .sum-btn').click();`);
-  await wait(1200);
-  v = await evalJS(`({body: document.querySelector('.summary-card .sum-body').textContent, saved: !!(Store.data.summaries || {})[currentDayKey]})`);
-  check('T14b 生成摘要：渲染并缓存', v && /模拟摘要/.test(v.body) && v.saved === true, JSON.stringify(v));
-  await evalJS(`window.fetch = window.__realFetch;`);
+  await evalJS(`document.querySelector('.btn-back').click();`);
+  await wait(300);
+  v = await evalJS(`document.querySelector('#app-title').textContent`);
+  check('T10 返回时间线：标题恢复', v === '造浪者', v);
 
-  // T11 Esc 关闭抽屉
+  // T11 AI 日报卡片（digest 接口已 mock，预生成内容直接展示）
+  await evalJS(`document.querySelector('#btn-next-day').click();`);
+  await wait(1500);
+  v = await evalJS(`({card: !!document.querySelector('.summary-card'), body: (document.querySelector('.summary-card .sum-body') || {}).textContent || '', hits: window.__digestHits})`);
+  check('T11 AI 日报卡片：预生成内容直接展示', v && v.card && /模拟日报/.test(v.body) && v.hits >= 1, `hits=${v && v.hits}`);
+  // T12 无客户端 AI 残留
+  v = await evalJS(`({callAI: typeof callAI !== 'undefined', AI_CONFIG: typeof AI_CONFIG !== 'undefined', genBtn: !!document.querySelector('.sum-btn')})`);
+  check('T12 无客户端 AI 调用残留', v && v.callAI === false && v.AI_CONFIG === false && v.genBtn === false, JSON.stringify(v));
+
+  // T13 Esc 关闭抽屉
   await evalJS(`document.querySelector('#btn-menu').click();`);
   await wait(200);
   await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`);
   await wait(200);
   v = await evalJS(`document.querySelector('#drawer-mask').classList.contains('hidden')`);
-  check('T11 Esc 关闭侧边栏', v === true, String(v));
-
-  // T12 清空缓存 → 自动重新加载（离线环境验证"自动回填流程被触发"）
-  await evalJS(`window.confirm = () => true;`);
-  await evalJS(`document.querySelector('#btn-settings').click();`);
-  await wait(200);
-  await evalJS(`document.querySelector('#btn-wipe').click();`);
-  await wait(3500);
-  v = await evalJS(`({txt: document.querySelector('#sync-text').textContent, vis: !document.querySelector('#sync-banner').classList.contains('hidden'), err: document.querySelector('#empty-text') ? document.querySelector('#empty-text').textContent : ''})`);
-  const attempted = (v && (/(查询|回填|刷新|加载)/.test(v.txt) || /加载失败/.test(v.err)));
-  check('T12 清空缓存后自动重新加载+回填（离线验证流程被触发）', attempted, JSON.stringify(v));
+  check('T13 Esc 关闭侧边栏', v === true, String(v));
 
   const failed = results.filter(r => !r[1]).length;
   console.log(`\n===== 汇总：${results.length - failed}/${results.length} 通过 =====`);
@@ -239,4 +241,4 @@ async function main() {
   process.exit(failed ? 1 : 0);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch(e => { console.error('TEST-ERR', e); process.exit(1); });

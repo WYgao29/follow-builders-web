@@ -4,10 +4,15 @@
  */
 'use strict';
 
-const REPO = 'zarazhangrui/follow-builders';
+const UPSTREAM_REPO = 'zarazhangrui/follow-builders'; // 上游原始数据（兜底）
+const ZH_REPO = 'WYgao29/zaolangzhe-data';            // 中文归档数据集（优先）
+const DATA_SOURCES = [
+  { id: 'zh', repo: ZH_REPO },
+  { id: 'upstream', repo: UPSTREAM_REPO },
+];
 const REF_MAIN = 'main';
 const PATHS = { x: 'feed-x.json', podcasts: 'feed-podcasts.json', blogs: 'feed-blogs.json' };
-const API_COMMITS = 'https://api.github.com/repos/' + REPO + '/commits';
+const API_COMMITS = 'https://api.github.com/repos/' + UPSTREAM_REPO + '/commits'; // 回填历史永远走上游
 const REFRESH_MIN_INTERVAL = 3600 * 1000;
 const BACKFILL_CONCURRENCY = 3;
 
@@ -70,8 +75,8 @@ function safeURL(u) {
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v3', // v3：日期改为"采集批次"语义（按快照日期分组，条目时间戳仅作展示）
-  data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0, summaries: {} },
+  KEY: 'fb.web.v4', // v4：数据源切换为中文归档仓库（digest 预生成，不再本地 AI 生成）
+  data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
     try {
@@ -85,7 +90,7 @@ const Store = {
   },
   wipe() {
     try { localStorage.removeItem(this.KEY); } catch (e) {}
-    this.data = { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0, summaries: {} };
+    this.data = { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 };
   },
   get pref() {
     try {
@@ -144,6 +149,7 @@ const DB = {
         this.posts.set(t.id, {
           id: t.id, text: decodeEntities(t.text || ''), ms,
           batchDay: batch || dayKey(ms),
+          textZh: decodeEntities(t.textZh || ''),
           url: t.url || '', likes: t.likes || 0, retweets: t.retweets || 0,
           replies: t.replies || 0, handle,
           builder: decodeEntities(builder.name || handle), bio: decodeEntities(builder.bio || ''),
@@ -164,7 +170,9 @@ const DB = {
       this.episodes.set(p.guid, {
         guid: p.guid, show: decodeEntities(p.name || '未知节目'),
         title: decodeEntities(p.title || '未命名单集'),
+        titleZh: decodeEntities(p.titleZh || ''),
         url: p.url || '', ms, batchDay: batch || dayKey(ms),
+        summaryZh: decodeEntities(p.summaryZh || ''),
         transcript: decodeEntities(p.transcript || ''),
       });
       added++;
@@ -182,9 +190,12 @@ const DB = {
       this.blogs.set(b.url, {
         url: b.url, source: decodeEntities(b.name || '未知来源'),
         title: decodeEntities((b.title || '未命名文章').trim()),
+        titleZh: decodeEntities(b.titleZh || ''),
         ms, batchDay: batch || dayKey(ms),
         author: decodeEntities(b.author || ''), summary: decodeEntities(b.description || ''),
-        content: decodeEntities(b.content || ''), publishedText: b.publishedAt || '',
+        content: decodeEntities(b.content || ''), contentZh: decodeEntities(b.contentZh || ''),
+        summaryZh: decodeEntities(b.summaryZh || ''),
+        publishedText: b.publishedAt || '',
       });
       added++;
     }
@@ -224,13 +235,13 @@ function parseDate(raw) {
 /* ---------- 镜像线路 ---------- */
 const Mirrors = {
   order: ['github', 'jsdelivr'],
-  url(kind, ref, path) {
-    if (kind === 'github') return `https://raw.githubusercontent.com/${REPO}/${ref}/${path}`;
-    return `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/${path}`;
+  url(kind, repo, ref, path) {
+    if (kind === 'github') return `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
+    return `https://cdn.jsdelivr.net/gh/${repo}@${ref}/${path}`;
   },
   label(kind) { return kind === 'github' ? 'GitHub 直连' : 'jsDelivr'; },
 
-  async fetchJSON(path, ref) {
+  async fetchJSON(path, ref, repo) {
     const pref = Store.pref.mirror || 'auto';
     const now = Date.now();
     let cand = pref === 'auto'
@@ -248,7 +259,7 @@ const Mirrors = {
         const timer = setTimeout(() => ctrl.abort(), 12000);
         let res;
         try {
-          res = await fetch(this.url(kind, ref || REF_MAIN, path), { cache: 'no-store', signal: ctrl.signal });
+          res = await fetch(this.url(kind, repo, ref || REF_MAIN, path), { cache: 'no-store', signal: ctrl.signal });
         } finally {
           clearTimeout(timer);
         }
@@ -262,7 +273,7 @@ const Mirrors = {
         return json;
       } catch (e) {
         lastErr = e;
-        if (pref === 'auto') this.coolUntil[kind] = Date.now() + 5 * 60 * 1000;
+        if (pref === 'auto') this.coolUntil[repo + '|' + kind] = Date.now() + 5 * 60 * 1000;
       }
     }
     updateMirrorStatus('所有线路均失败');
@@ -333,62 +344,15 @@ function renderBlogContent(container, text) {
   flush();
 }
 
-/* ---------- AI 摘要（智谱 GLM，浏览器直连） ---------- */
-const AI_CONFIG = {
-  baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-  model: 'glm-5.3-flash',
-  key: 'c61238f530ea4e15b6dca32225127ce1.K0wECpOS9hctgN4o',
-};
-
-const SUMMARY_SYSTEM = '你是「造浪者」日报编辑。基于用户提供的当天采集内容，用中文输出一份简明日报：先用一句话点出当天最重要的动向；再按【播客】【X 推文】【博客】分节（没有内容的节跳过），每条 1-2 句中文摘要并保留原文链接；只基于给定材料，不编造、不猜测；直接输出 Markdown 正文。';
-
-async function callAI(system, user) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 180000);
-  try {
-    const res = await fetch(AI_CONFIG.baseUrl + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AI_CONFIG.key },
-      body: JSON.stringify({ model: AI_CONFIG.model, temperature: 0.3, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 120));
-    const data = await res.json();
-    return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function buildDayPrompt(g) {
-  const cap = (s, n) => (s || '').slice(0, n);
-  const L = [];
-  if (g.posts.length) {
-    L.push('【X 推文】');
-    const by = new Map();
-    for (const p of g.posts) { if (!by.has(p.handle)) by.set(p.handle, []); by.get(p.handle).push(p); }
-    for (const [h, ps] of by) {
-      L.push('@' + h + ' (' + (ps[0].builder || h) + '):');
-      for (const p of ps) L.push('- ' + cap(p.text, 300) + (p.url ? ' 链接: ' + p.url : ''));
-    }
-  }
-  if (g.episodes.length) {
-    L.push('【播客】');
-    for (const e of g.episodes) L.push('- ' + e.show + '《' + e.title + '》 链接: ' + e.url + ' 转录节选: ' + cap(e.transcript, 1500));
-  }
-  if (g.blogs.length) {
-    L.push('【博客】');
-    for (const b of g.blogs) L.push('- ' + b.source + '《' + b.title + '》 链接: ' + b.url + ' 正文节选: ' + cap(b.content, 2000));
-  }
-  return L.join('\n').slice(0, 30000);
-}
-
 /* ---------- 状态与渲染 ---------- */
 let syncBusy = false;
 let currentDayKey = null;   // 当前展示的日（null = 最新一天）
 let dayKeysCache = [];      // 最近一次渲染的全部日键（新→旧）
 let contentFilter = null;   // null | 'x' | 'podcasts' | 'blogs'（分类筛选视图）
 let pendingBackfill = false; // 回填进行中又调大了深度 → 完成后自动续跑
+let activeSource = 'zh';     // 当前数据来源（zh=中文归档仓库 / upstream=上游兜底）
+let renderSeq = 0;           // 渲染序号：异步补卡片时防止旧渲染误插入
+const digestCache = new Map(); // batchDay -> markdown | null
 
 const FILTER_META = {
   x: {
@@ -463,7 +427,7 @@ function appendEpisodes(section, episodes) {
     const row = el('button', 'row-card podcast');
     const d = el('div', 'r-main');
     d.appendChild(el('div', 'r-kicker', '🎙 ' + e.show));
-    d.appendChild(el('div', 'r-title', e.title));
+    d.appendChild(el('div', 'r-title', e.titleZh || e.title));
     row.appendChild(d);
     row.appendChild(el('span', 'r-go', '转录 ›'));
     row.addEventListener('click', () => openReader({
@@ -472,6 +436,11 @@ function appendEpisodes(section, episodes) {
       url: e.url || null,
       linkTitle: '收听 / 观看',
       build(body) {
+        if (e.summaryZh) {
+          body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
+          renderBlogContent(body, e.summaryZh);
+          body.appendChild(el('p', 'rb-subhead', '— 转录原文 —'));
+        }
         const segs = parseTranscript(e.transcript);
         if (!segs) { body.appendChild(el('p', 'rb-para', e.transcript || '（无转录内容）')); return; }
         body.appendChild(el('p', 'rb-meta', `转录共 ${segs.length} 段`));
@@ -496,21 +465,10 @@ function appendBlogs(section, blogs) {
     const row = el('button', 'row-card blog');
     const d = el('div', 'r-main');
     d.appendChild(el('div', 'r-kicker', '📄 ' + b.source));
-    d.appendChild(el('div', 'r-title', b.title));
+    d.appendChild(el('div', 'r-title', b.titleZh || b.title));
     row.appendChild(d);
     row.appendChild(el('span', 'r-go', '阅读 ›'));
-    row.addEventListener('click', () => openReader({
-      kicker: '📄 ' + b.source,
-      title: b.title,
-      url: b.url || null,
-      linkTitle: '访问原文',
-      build(body) {
-        body.appendChild(el('p', 'rb-meta',
-          (b.publishedText || timeHM(b.ms)) + (b.author ? ' · ' + b.author : '')));
-        if (b.summary) body.appendChild(el('p', 'rb-para', b.summary));
-        renderBlogContent(body, b.content);
-      },
-    }));
+    row.addEventListener('click', () => openBlogReader(b));
     section.appendChild(row);
   }
 }
@@ -587,7 +545,29 @@ async function ensureFreshBatch() {
   await refreshCurrent({ silent: true });
 }
 
+async function appendDigestCard(section, batchDay) {
+  const token = renderSeq;
+  let md = digestCache.has(batchDay) ? digestCache.get(batchDay) : undefined;
+  if (md === undefined) {
+    try {
+      const j = await Mirrors.fetchJSON('digest/' + batchDay + '.json', 'main', ZH_REPO);
+      md = (j && j.markdown) || null;
+    } catch (e) { md = null; }
+    digestCache.set(batchDay, md);
+  }
+  if (!md || token !== renderSeq || contentFilter || currentDayKey !== batchDay) return;
+  const card = el('div', 'summary-card');
+  const head = el('div', 'sum-head');
+  head.appendChild(el('span', 'sum-label', '✨ AI 日报'));
+  card.appendChild(head);
+  const body = el('div', 'sum-body');
+  renderBlogContent(body, md);
+  card.appendChild(body);
+  section.insertBefore(card, section.children[1] || null); // 紧跟日期头之后
+}
+
 function render() {
+  renderSeq++;
   const groups = new Map(); // dayKey -> {posts:[], episodes:[], blogs:[]}
   const bucket = (key) => {
     if (!groups.has(key)) groups.set(key, { posts: [], episodes: [], blogs: [] });
@@ -705,7 +685,7 @@ function render() {
   head.appendChild(el('span', 'd-stats', bits.join(' · ')));
   section.appendChild(head);
 
-  appendSummary(section, current, g);
+  appendDigestCard(section, current); // 异步：有预生成日报就补展示
 
   // 推文（按构建者分组）
   if (g.posts.length) appendTweets(section, g.posts);
@@ -727,48 +707,6 @@ function render() {
     nextBtn.classList.add('hidden');
   }
   updateBackfillButton();
-}
-
-/* ---------- AI 摘要卡片 ---------- */
-function appendSummary(section, batchDay, g) {
-  const saved = (Store.data.summaries || {})[batchDay];
-  const card = el('div', 'summary-card');
-  const head = el('div', 'sum-head');
-  head.appendChild(el('span', 'sum-label', '✨ AI 摘要'));
-  const actions = el('div', 'sum-actions');
-  const btn = el('button', 'sum-btn', saved ? '重新生成' : '生成 AI 摘要');
-  actions.appendChild(btn);
-  if (saved) {
-    const del = el('button', 'sum-btn', '删除');
-    del.addEventListener('click', () => {
-      if ((Store.data.summaries || {})[batchDay]) { delete Store.data.summaries[batchDay]; Store.save(); render(); }
-    });
-    actions.appendChild(del);
-  }
-  head.appendChild(actions);
-  card.appendChild(head);
-
-  const body = el('div', 'sum-body');
-  if (saved) renderBlogContent(body, saved);
-  card.appendChild(body);
-
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    body.textContent = '';
-    body.appendChild(el('p', 'sum-hint', '正在生成摘要…（GLM-5.3-Flash，通常 30-90 秒）'));
-    try {
-      const text = await callAI(SUMMARY_SYSTEM, buildDayPrompt(g));
-      if (!text.trim()) throw new Error('AI 返回为空');
-      (Store.data.summaries || {})[batchDay] = text;
-      Store.save();
-      render();
-    } catch (e) {
-      body.textContent = '';
-      body.appendChild(el('p', 'sum-err', '生成失败：' + (e && e.message ? e.message : '网络异常')));
-      btn.disabled = false;
-    }
-  });
-  section.appendChild(card);
 }
 
 function svgIcon(path) {
@@ -803,8 +741,11 @@ function avatarEl(handle, name) {
 }
 
 function tweetCard(p) {
+  const zhText = (p.textZh || '').trim();
+  let showZh = !!zhText;
   const card = el('div', 'tweet-card');
-  card.appendChild(el('div', 'tweet-text', p.text));
+  const textNode = el('div', 'tweet-text', showZh ? zhText : p.text);
+  card.appendChild(textNode);
   const meta = el('div', 'tweet-meta');
   const stat = (path, n) => { const s = el('span'); s.appendChild(svgIcon(path)); s.appendChild(document.createTextNode(countFmt(n))); return s; };
   meta.appendChild(stat('M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 8V4c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z', p.replies));
@@ -812,6 +753,17 @@ function tweetCard(p) {
   meta.appendChild(stat('M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z', p.likes));
   meta.appendChild(el('span', 'grow'));
   meta.appendChild(el('span', null, timeHM(p.ms)));
+  card.appendChild(meta);
+  if (zhText && p.text && p.text.trim() !== zhText) {
+    const toggle = el('button', 'lang-toggle', showZh ? 'EN' : '中');
+    toggle.title = showZh ? '查看英文原文' : '查看中文翻译';
+    toggle.addEventListener('click', () => {
+      showZh = !showZh;
+      textNode.textContent = showZh ? zhText : p.text;
+      toggle.textContent = showZh ? 'EN' : '中';
+    });
+    meta.insertBefore(toggle, meta.firstChild);
+  }
   card.appendChild(meta);
   if (p.url) {
     const href = safeURL(p.url);
@@ -860,18 +812,54 @@ function closeReader() {
   document.body.style.overflow = '';
 }
 
+/* 博客阅读器：默认中文译文，可切换英文原文 */
+function openBlogReader(b) {
+  const hasZh = !!(b.contentZh && b.contentZh.trim()) || !!(b.titleZh && b.titleZh.trim());
+  let showZh = hasZh;
+  const body = $('#reader-body');
+  const paint = () => {
+    body.textContent = '';
+    const title = showZh && b.titleZh ? b.titleZh : b.title;
+    $('#reader-title').textContent = title;
+    body.appendChild(el('p', 'rb-kicker', '📄 ' + b.source));
+    body.appendChild(el('div', 'rb-title', title));
+    body.appendChild(el('p', 'rb-meta',
+      (b.publishedText || timeHM(b.ms)) + (b.author ? ' · ' + b.author : '')));
+    if (b.summary && !showZh) body.appendChild(el('p', 'rb-para', b.summary));
+    if (b.summaryZh) body.appendChild(el('p', 'rb-para', b.summaryZh));
+    renderBlogContent(body, showZh && b.contentZh ? b.contentZh : b.content);
+    if (hasZh && b.content && b.content.trim() !== (b.contentZh || '').trim()) {
+      const t = el('button', 'lang-toggle', showZh ? '看英文原文' : '看中文翻译');
+      t.addEventListener('click', () => { showZh = !showZh; paint(); });
+      body.insertBefore(t, body.children[2] || null);
+    }
+  };
+  $('#reader-link').classList.toggle('hidden', !b.url);
+  if (b.url) { $('#reader-link').href = safeURL(b.url) || ''; $('#reader-link').title = '访问原文'; }
+  paint();
+  $('#reader').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
 /* ---------- 拉取与合并 ---------- */
 async function fetchAllFeeds(fallbackMs) {
-  const [x, podcasts, blogs] = await Promise.all([
-    Mirrors.fetchJSON(PATHS.x).catch(() => null),
-    Mirrors.fetchJSON(PATHS.podcasts).catch(() => null),
-    Mirrors.fetchJSON(PATHS.blogs).catch(() => null),
-  ]);
-  let added = 0;
-  if (x) added += DB.mergeX(x, fallbackMs);
-  if (podcasts) added += DB.mergePodcasts(podcasts, fallbackMs);
-  if (blogs) added += DB.mergeBlogs(blogs, fallbackMs);
-  return added;
+  // 优先中文归档仓库（全量归档，一次到位）；整体失败降级到上游当前快照
+  for (const src of DATA_SOURCES) {
+    const [x, podcasts, blogs] = await Promise.all([
+      Mirrors.fetchJSON(PATHS.x, 'main', src.repo).catch(() => null),
+      Mirrors.fetchJSON(PATHS.podcasts, 'main', src.repo).catch(() => null),
+      Mirrors.fetchJSON(PATHS.blogs, 'main', src.repo).catch(() => null),
+    ]);
+    if (!x && !podcasts && !blogs) continue;
+    let added = 0;
+    if (x) added += DB.mergeX(x, fallbackMs);
+    if (podcasts) added += DB.mergePodcasts(podcasts, fallbackMs);
+    if (blogs) added += DB.mergeBlogs(blogs, fallbackMs);
+    activeSource = src.id;
+    return added;
+  }
+  activeSource = 'none';
+  return 0;
 }
 
 async function refreshCurrent({ silent } = {}) {
@@ -949,6 +937,8 @@ async function listCommitDays(path, limitDays) {
 }
 
 async function backfill() {
+  // 中文归档仓库本身就是全量数据，无需回填；回填仅用于上游兜底数据
+  if (activeSource !== 'upstream') return;
   if (syncBusy) return;
   syncBusy = true;
   const btn = $('#btn-backfill');
@@ -1040,7 +1030,7 @@ function updateBackfillButton() {
   const covered = Store.data.oldestDay &&
     (Date.now() - Store.data.oldestDay) >= depth * 86400000;
   // 只在时间线视图、浏览"最早的一天"时才出现（与"下一天"按钮互斥）
-  const atOldest = !contentFilter && dayKeysCache.length > 0 &&
+  const atOldest = activeSource === 'upstream' && !contentFilter && dayKeysCache.length > 0 &&
     currentDayKey === dayKeysCache[dayKeysCache.length - 1];
   btn.classList.toggle('hidden', !DB.posts.size || syncBusy || covered || !atOldest);
 }
