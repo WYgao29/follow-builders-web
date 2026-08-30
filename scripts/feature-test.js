@@ -161,21 +161,32 @@ async function main() {
   v = await evalJS(`({t: document.querySelector('.day-section .d-title').textContent, next: !document.querySelector('#btn-next-day').classList.contains('hidden')})`);
   check('T4 下一天按钮：切到昨天且按钮仍在', v && v.t === '昨天' && v.next, `title=${v && v.t}`);
 
-  // T5 中文译文默认展示 + 中/EN 切换
+  // T5 中文模式：每条 = 【AI 简述】+【原文】双段结构
   await evalJS(`document.querySelectorAll('#day-chips .chip')[0].click();`);
   await wait(300);
   v = await evalJS(`(() => {
-    const card = [...document.querySelectorAll('.tweet-card')].find(c => c.querySelector('.lang-toggle'));
+    const card = [...document.querySelectorAll('.tweet-card')].find(c => c.querySelector('.zh-brief'));
     if (!card) return { found: false };
-    const zh = card.querySelector('.tweet-text').textContent;
-    card.querySelector('.lang-toggle').click();
-    const en = card.querySelector('.tweet-text').textContent;
-    const flipped = card.querySelector('.lang-toggle').textContent;
-    card.querySelector('.lang-toggle').click();
-    const back = card.querySelector('.tweet-text').textContent;
-    return { found: true, zh, en, flipped, back };
+    return {
+      found: true,
+      brief: card.querySelector('.zh-brief').textContent,
+      orig: card.querySelector('.tweet-orig').textContent,
+      briefCount: document.querySelectorAll('.zh-brief').length,
+    };
   })()`);
-  check('T5 中文默认展示，EN 切换双向可用', v && v.found && /中文推文/.test(v.zh) && /Day/.test(v.en) && v.flipped === '中' && /中文推文/.test(v.back), JSON.stringify(v).slice(0, 140));
+  check('T5 中文模式：简述块 + 原文段同卡展示', v && v.found && /AI 简述/.test(v.brief) && /中文推文·第0天·0/.test(v.brief) && /Day 0 tweet 0-0/.test(v.orig), JSON.stringify(v).slice(0, 160));
+
+  // T5b 顶栏全局切 EN：简述块消失，全部显示英文原文
+  await evalJS(`document.querySelector('#btn-lang').click();`);
+  await wait(300);
+  v = await evalJS(`({briefs: document.querySelectorAll('.zh-brief').length, first: document.querySelector('.tweet-card .tweet-text').textContent, lang: document.querySelector('#btn-lang').textContent})`);
+  check('T5b 全局切 EN：仅原文展示', v && v.briefs === 0 && /Day/.test(v.first) && v.lang === '中', JSON.stringify(v).slice(0, 120));
+
+  // T5b2 切回中文
+  await evalJS(`document.querySelector('#btn-lang').click();`);
+  await wait(300);
+  v = await evalJS(`({briefs: document.querySelectorAll('.zh-brief').length, lang: document.querySelector('#btn-lang').textContent})`);
+  check('T5b2 切回中文：简述块恢复', v && v.briefs >= 1 && v.lang === 'EN', `briefs=${v && v.briefs}`);
 
   // T6 筛选 X 推文（跨天全部）
   await evalJS(`document.querySelector('[data-filter=x]').click();`);
@@ -199,7 +210,7 @@ async function main() {
   v = await evalJS(`[...document.querySelectorAll('.row-card.blog .r-title')].map(x => x.textContent).join('|')`);
   check('T8 筛选博客：有译文的显示中文标题', /文章中文标题/.test(v || '') && /Post 4/.test(v || ''), v);
 
-  // T9 博客阅读器：中文默认 + 切换英文
+  // T9 博客阅读器：默认中文译文（阅读器内也有切换小按钮）
   await evalJS(`[...document.querySelectorAll('.row-card.blog')].find(r => r.textContent.includes('文章中文标题')).click();`);
   await wait(400);
   v = await evalJS(`(() => {
@@ -207,10 +218,11 @@ async function main() {
     const zh = body.textContent.includes('中文全文翻译');
     const toggle = body.querySelector('.lang-toggle');
     toggle.click();
-    const en = body.textContent.includes('English body');
-    return { zh, en };
+    const en = body.textContent.includes('English body') && !body.textContent.includes('中文全文翻译');
+    toggle.click();
+    return { zh, en, backZh: body.textContent.includes('中文全文翻译') };
   })()`);
-  check('T9 博客阅读器：中文默认 + 切换英文原文', v && v.zh === true && v.en === true, JSON.stringify(v));
+  check('T9 博客阅读器：中文默认 + 阅读器内切换英文', v && v.zh === true && v.en === true && v.backZh === true, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
   // T10 返回时间线
@@ -221,11 +233,22 @@ async function main() {
   v = await evalJS(`document.querySelector('#app-title').textContent`);
   check('T10 返回时间线：标题恢复', v === '造浪者', v);
 
-  // T11 AI 日报卡片（digest 接口已 mock，预生成内容直接展示）
-  await evalJS(`document.querySelector('#btn-next-day').click();`);
-  await wait(1500);
-  v = await evalJS(`({card: !!document.querySelector('.summary-card'), body: (document.querySelector('.summary-card .sum-body') || {}).textContent || '', hits: window.__digestHits})`);
-  check('T11 AI 日报卡片：预生成内容直接展示', v && v.card && /模拟日报/.test(v.body) && v.hits >= 1, `hits=${v && v.hits}`);
+  // T11 全局 EN 模式下播客阅读器：不显示中文要点摘要
+  await evalJS(`document.querySelector('#btn-lang').click();`); // → en
+  await wait(200);
+  await evalJS(`document.querySelector('[data-filter=podcasts]').click();`);
+  await wait(300);
+  await evalJS(`document.querySelector('.row-card.podcast').click();`);
+  await wait(400);
+  v = await evalJS(`({hasZhSummary: document.querySelector('#reader-body').textContent.includes('要点摘要'), enTitle: document.querySelector('#reader-title').textContent})`);
+  check('T11 EN 模式：播客阅读器仅原文转录', v && v.hasZhSummary === false && /Episode/.test(v.enTitle), JSON.stringify(v));
+  await evalJS(`document.querySelector('#reader-close').click();`);
+  await evalJS(`document.querySelector('#btn-lang').click();`); // → zh
+  await wait(200);
+  await evalJS(`document.querySelector('[data-filter=x]').click();`);
+  await wait(200);
+  await evalJS(`document.querySelector('.btn-back').click();`);
+  await wait(200);
   // T12 无客户端 AI 残留
   v = await evalJS(`({callAI: typeof callAI !== 'undefined', AI_CONFIG: typeof AI_CONFIG !== 'undefined', genBtn: !!document.querySelector('.sum-btn')})`);
   check('T12 无客户端 AI 调用残留', v && v.callAI === false && v.AI_CONFIG === false && v.genBtn === false, JSON.stringify(v));

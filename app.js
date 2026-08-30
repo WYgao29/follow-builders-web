@@ -351,8 +351,8 @@ let dayKeysCache = [];      // 最近一次渲染的全部日键（新→旧）
 let contentFilter = null;   // null | 'x' | 'podcasts' | 'blogs'（分类筛选视图）
 let pendingBackfill = false; // 回填进行中又调大了深度 → 完成后自动续跑
 let activeSource = 'zh';     // 当前数据来源（zh=中文归档仓库 / upstream=上游兜底）
-let renderSeq = 0;           // 渲染序号：异步补卡片时防止旧渲染误插入
-const digestCache = new Map(); // batchDay -> markdown | null
+let langMode = Store.pref.lang || 'zh'; // 全局原文语言：zh=中文优先 / en=英文原文
+let currentReaderReopen = null;         // 阅读器打开时的重绘句柄（切换语言用）
 
 const FILTER_META = {
   x: {
@@ -427,16 +427,27 @@ function appendEpisodes(section, episodes) {
     const row = el('button', 'row-card podcast');
     const d = el('div', 'r-main');
     d.appendChild(el('div', 'r-kicker', '🎙 ' + e.show));
-    d.appendChild(el('div', 'r-title', e.titleZh || e.title));
+    d.appendChild(el('div', 'r-title', langMode === 'zh' && e.titleZh ? e.titleZh : e.title));
     row.appendChild(d);
     row.appendChild(el('span', 'r-go', '转录 ›'));
-    row.addEventListener('click', () => openReader({
-      kicker: '🎙 ' + e.show + ' · ' + timeHM(e.ms),
-      title: e.title,
+    row.addEventListener('click', () => {
+      currentReaderReopen = () => openPodcastReader(e);
+      openPodcastReader(e);
+    });
+    section.appendChild(row);
+  }
+}
+
+function openPodcastReader(e) {
+  {
+    const kicker = '🎙 ' + e.show + ' · ' + timeHM(e.ms);
+    const title = langMode === 'zh' && e.titleZh ? e.titleZh : e.title;
+    openReader({
+      kicker, title,
       url: e.url || null,
       linkTitle: '收听 / 观看',
       build(body) {
-        if (e.summaryZh) {
+        if (langMode === 'zh' && e.summaryZh) {
           body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
           renderBlogContent(body, e.summaryZh);
           body.appendChild(el('p', 'rb-subhead', '— 转录原文 —'));
@@ -454,10 +465,10 @@ function appendEpisodes(section, episodes) {
           body.appendChild(item);
         }
       },
-    }));
-    section.appendChild(row);
+    });
   }
 }
+
 
 function appendBlogs(section, blogs) {
   blogs.sort((a, b) => b.ms - a.ms);
@@ -545,29 +556,8 @@ async function ensureFreshBatch() {
   await refreshCurrent({ silent: true });
 }
 
-async function appendDigestCard(section, batchDay) {
-  const token = renderSeq;
-  let md = digestCache.has(batchDay) ? digestCache.get(batchDay) : undefined;
-  if (md === undefined) {
-    try {
-      const j = await Mirrors.fetchJSON('digest/' + batchDay + '.json', 'main', ZH_REPO);
-      md = (j && j.markdown) || null;
-    } catch (e) { md = null; }
-    digestCache.set(batchDay, md);
-  }
-  if (!md || token !== renderSeq || contentFilter || currentDayKey !== batchDay) return;
-  const card = el('div', 'summary-card');
-  const head = el('div', 'sum-head');
-  head.appendChild(el('span', 'sum-label', '✨ AI 日报'));
-  card.appendChild(head);
-  const body = el('div', 'sum-body');
-  renderBlogContent(body, md);
-  card.appendChild(body);
-  section.insertBefore(card, section.children[1] || null); // 紧跟日期头之后
-}
 
 function render() {
-  renderSeq++;
   const groups = new Map(); // dayKey -> {posts:[], episodes:[], blogs:[]}
   const bucket = (key) => {
     if (!groups.has(key)) groups.set(key, { posts: [], episodes: [], blogs: [] });
@@ -598,6 +588,7 @@ function render() {
     chips.style.display = 'none';
     document.body.classList.add('filter-mode');
     $('#app-title').textContent = FILTER_META[contentFilter].title;
+    $('#btn-lang').textContent = langMode === 'zh' ? 'EN' : '中';
 
     const fhead = el('div', 'filter-head');
     const back = el('button', 'btn-back', '‹ 返回时间线');
@@ -642,6 +633,7 @@ function render() {
   chips.style.display = '';
   document.body.classList.remove('filter-mode');
   $('#app-title').textContent = '造浪者';
+  $('#btn-lang').textContent = langMode === 'zh' ? 'EN' : '中';
 
   // 单日视图：只渲染当前日（默认最新一天）
   if (!currentDayKey || !keys.includes(currentDayKey)) currentDayKey = keys[0];
@@ -684,8 +676,6 @@ function render() {
   if (g.blogs.length) bits.push(g.blogs.length + ' 博客');
   head.appendChild(el('span', 'd-stats', bits.join(' · ')));
   section.appendChild(head);
-
-  appendDigestCard(section, current); // 异步：有预生成日报就补展示
 
   // 推文（按构建者分组）
   if (g.posts.length) appendTweets(section, g.posts);
@@ -742,10 +732,18 @@ function avatarEl(handle, name) {
 
 function tweetCard(p) {
   const zhText = (p.textZh || '').trim();
-  let showZh = !!zhText;
+  const useZh = langMode === 'zh' && !!zhText;
   const card = el('div', 'tweet-card');
-  const textNode = el('div', 'tweet-text', showZh ? zhText : p.text);
-  card.appendChild(textNode);
+  if (useZh) {
+    // 【AI 中文简述】+【原文信息】双段结构
+    const brief = el('div', 'zh-brief');
+    brief.appendChild(el('span', 'brief-tag', 'AI 简述'));
+    brief.appendChild(document.createTextNode(zhText));
+    card.appendChild(brief);
+    card.appendChild(el('div', 'tweet-orig', p.text));
+  } else {
+    card.appendChild(el('div', 'tweet-text', p.text));
+  }
   const meta = el('div', 'tweet-meta');
   const stat = (path, n) => { const s = el('span'); s.appendChild(svgIcon(path)); s.appendChild(document.createTextNode(countFmt(n))); return s; };
   meta.appendChild(stat('M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 8V4c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z', p.replies));
@@ -753,17 +751,6 @@ function tweetCard(p) {
   meta.appendChild(stat('M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z', p.likes));
   meta.appendChild(el('span', 'grow'));
   meta.appendChild(el('span', null, timeHM(p.ms)));
-  card.appendChild(meta);
-  if (zhText && p.text && p.text.trim() !== zhText) {
-    const toggle = el('button', 'lang-toggle', showZh ? 'EN' : '中');
-    toggle.title = showZh ? '查看英文原文' : '查看中文翻译';
-    toggle.addEventListener('click', () => {
-      showZh = !showZh;
-      textNode.textContent = showZh ? zhText : p.text;
-      toggle.textContent = showZh ? 'EN' : '中';
-    });
-    meta.insertBefore(toggle, meta.firstChild);
-  }
   card.appendChild(meta);
   if (p.url) {
     const href = safeURL(p.url);
@@ -812,30 +799,37 @@ function closeReader() {
   document.body.style.overflow = '';
 }
 
-/* 博客阅读器：默认中文译文，可切换英文原文 */
+/* 博客阅读器：跟随全局语言（中文优先显示译文） */
 function openBlogReader(b) {
   const hasZh = !!(b.contentZh && b.contentZh.trim()) || !!(b.titleZh && b.titleZh.trim());
-  let showZh = hasZh;
-  const body = $('#reader-body');
   const paint = () => {
-    body.textContent = '';
+    const showZh = langMode === 'zh' && hasZh;
     const title = showZh && b.titleZh ? b.titleZh : b.title;
     $('#reader-title').textContent = title;
+    const body = $('#reader-body');
+    body.textContent = '';
     body.appendChild(el('p', 'rb-kicker', '📄 ' + b.source));
     body.appendChild(el('div', 'rb-title', title));
     body.appendChild(el('p', 'rb-meta',
       (b.publishedText || timeHM(b.ms)) + (b.author ? ' · ' + b.author : '')));
-    if (b.summary && !showZh) body.appendChild(el('p', 'rb-para', b.summary));
-    if (b.summaryZh) body.appendChild(el('p', 'rb-para', b.summaryZh));
+    if (showZh && b.summaryZh) body.appendChild(el('p', 'rb-para', b.summaryZh));
+    if (!showZh && b.summary) body.appendChild(el('p', 'rb-para', b.summary));
     renderBlogContent(body, showZh && b.contentZh ? b.contentZh : b.content);
+    const other = showZh ? '看英文原文' : '看中文翻译';
     if (hasZh && b.content && b.content.trim() !== (b.contentZh || '').trim()) {
-      const t = el('button', 'lang-toggle', showZh ? '看英文原文' : '看中文翻译');
-      t.addEventListener('click', () => { showZh = !showZh; paint(); });
+      const t = el('button', 'lang-toggle', other);
+      t.addEventListener('click', () => {
+        langMode = langMode === 'zh' ? 'en' : 'zh';
+        Store.setPref({ lang: langMode });
+        $('#btn-lang').textContent = langMode === 'zh' ? 'EN' : '中';
+        paint();
+      });
       body.insertBefore(t, body.children[2] || null);
     }
   };
   $('#reader-link').classList.toggle('hidden', !b.url);
   if (b.url) { $('#reader-link').href = safeURL(b.url) || ''; $('#reader-link').title = '访问原文'; }
+  currentReaderReopen = () => openBlogReader(b);
   paint();
   $('#reader').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -1053,6 +1047,13 @@ function closeSettings() { $('#settings-mask').classList.add('hidden'); }
 
 /* ---------- 事件绑定 ---------- */
 function bind() {
+  $('#btn-lang').addEventListener('click', () => {
+    langMode = langMode === 'zh' ? 'en' : 'zh';
+    Store.setPref({ lang: langMode });
+    render();
+    // 阅读器打开时同步重绘
+    if (!$('#reader').classList.contains('hidden') && typeof currentReaderReopen === 'function') currentReaderReopen();
+  });
   $('#btn-menu').addEventListener('click', openDrawer);
   $('#drawer-mask').addEventListener('click', (e) => {
     if (e.target === $('#drawer-mask')) closeDrawer();
