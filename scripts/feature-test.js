@@ -86,6 +86,35 @@ function seedData() {
 }
 
 const seed = seedData();
+const smokeDay = seed.posts[0].batchDay;
+const smokeIndex = {
+  schemaVersion: 2, generatedAt: new Date().toISOString(),
+  days: [{ day: smokeDay, path: `data/days/${smokeDay}.json`, counts: { x: 1, podcasts: 0, blogs: 0 } }],
+};
+const smokeFile = {
+  schemaVersion: 2, day: smokeDay, generatedAt: smokeIndex.generatedAt,
+  x: [{
+    id: 'v2-smoke', handle: 'smoke', builder: 'V2 Smoke', bio: '',
+    text: 'V2 browser smoke', textZh: 'V2 浏览器冒烟', createdAt: new Date().toISOString(),
+    url: 'https://x.com/smoke/status/v2-smoke', likes: 0, retweets: 0, replies: 0,
+  }],
+  podcasts: [], blogs: [],
+};
+const V2_SMOKE_SCRIPT = `
+  window.__allowDataFetch = true;
+  window.__fetchPaths = [];
+  const smokePayloads = ${JSON.stringify({ 'data/index.json': smokeIndex, [`data/days/${smokeDay}.json`]: smokeFile })};
+  window.fetch = (input) => {
+    const url = String(input);
+    window.__fetchPaths.push(url);
+    if (!window.__allowDataFetch) return Promise.reject(new Error('offline test mode'));
+    const path = Object.keys(smokePayloads).find(candidate => url.includes(candidate));
+    if (!path || !url.includes('WYgao29/zaolangzhe-data')) return Promise.reject(new Error('unexpected request: ' + url));
+    return Promise.resolve(new Response(JSON.stringify(smokePayloads[path]), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+  };
+`;
 
 let mainChrome = null;
 async function main() {
@@ -117,8 +146,18 @@ async function main() {
   };
 
   await send('Page.enable');
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: V2_SMOKE_SCRIPT });
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(1500);
+  const smoke = await evalJS(`({
+    source: activeSource,
+    posts: DB.posts.size,
+    paths: window.__fetchPaths,
+    hasChinese: [...DB.posts.values()].some(item => item.textZh === 'V2 浏览器冒烟'),
+  })`);
+  const results = [];
+  const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
+  check('T0 空缓存首启：只请求 v2 index/day 并启用中文源', smoke && smoke.source === 'zh' && smoke.posts === 1 && smoke.hasChinese && smoke.paths.length === 2 && smoke.paths.some(url => url.includes('data/index.json')) && smoke.paths.some(url => url.includes(`data/days/${smokeDay}.json`)) && smoke.paths.every(url => !url.includes('feed-')), JSON.stringify(smoke));
   // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
   const seeded = await evalJS(`(() => {
     localStorage.clear();
@@ -129,9 +168,6 @@ async function main() {
   console.log('播种:', seeded);
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(2500);
-
-  const results = [];
-  const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
 
   // T1 单日视图 + 品牌
   let v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
@@ -245,6 +281,7 @@ async function main() {
   check('T12 无客户端 AI 调用残留', v && v.callAI === false && v.AI_CONFIG === false && v.genBtn === false, JSON.stringify(v));
 
   // T12b 清空缓存：确认数据立即清空（离线不验证后续自动重载，那需要网络）
+  await evalJS(`window.__allowDataFetch = false;`);
   await evalJS(`window.confirm = () => true;`);
   await evalJS(`document.querySelector('#btn-settings').click();`);
   await wait(300);
