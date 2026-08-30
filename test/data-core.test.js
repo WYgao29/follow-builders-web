@@ -48,15 +48,26 @@ test('loadChineseDays reads the selected v2 shards from newest to oldest', async
   assert.ok(seen.every(value => value.repo === 'owner/data'));
 });
 
-test('loadChineseDays rejects a partial archive instead of silently accepting it', async () => {
+test('loadChineseDays keeps the latest shard and reports older shard failures', async () => {
   const fetchJSON = async (path) => {
     if (path === 'data/index.json') return index(['2026-08-30', '2026-08-29']);
     if (path.endsWith('30.json')) return day('2026-08-30');
     throw new Error('network down');
   };
+  const result = await Core.loadChineseDays({ fetchJSON, repo: 'owner/data', depth: 2 });
+  assert.deepEqual(result.days.map(value => value.day), ['2026-08-30']);
+  assert.deepEqual(result.failures.map(value => value.day), ['2026-08-29']);
+});
+
+test('loadChineseDays rejects the archive when the newest shard fails', async () => {
+  const fetchJSON = async (path) => {
+    if (path === 'data/index.json') return index(['2026-08-30', '2026-08-29']);
+    if (path.endsWith('29.json')) return day('2026-08-29');
+    throw new Error('network down');
+  };
   await assert.rejects(
     Core.loadChineseDays({ fetchJSON, repo: 'owner/data', depth: 2 }),
-    /中文归档加载失败.*2026-08-29/,
+    /中文归档最新日加载失败.*2026-08-30/,
   );
 });
 

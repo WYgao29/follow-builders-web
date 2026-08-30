@@ -16,4 +16,6 @@ test('app uses v5 storage and the strict v2 primary/fallback loaders', () => {
   assert.match(source, /Core\.loadChineseDays/);
   assert.match(source, /Core\.loadUpstreamSnapshot/);
   assert.doesNotMatch(source, /Mirrors\.fetchJSON\(PATHS\[job\.kind\], job\.sha\)/);
+  assert.match(source, /attempted.*succeeded.*failed/s);
+  assert.doesNotMatch(source, /已回填 \$\{done\}\/\$\{total\}/);
 });

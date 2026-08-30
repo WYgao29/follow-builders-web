@@ -96,23 +96,38 @@
     return file;
   }
 
-  async function loadChineseDays({ fetchJSON, repo, depth = 7, ref = 'main' }) {
+  async function allSettledLimit(items, limit, worker) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function run() {
+      while (next < items.length) {
+        const position = next++;
+        try { results[position] = { status: 'fulfilled', value: await worker(items[position]) }; }
+        catch (reason) { results[position] = { status: 'rejected', reason }; }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+    return results;
+  }
+
+  async function loadChineseDays({ fetchJSON, repo, depth = 7, ref = 'main', concurrency = 4 }) {
     if (typeof fetchJSON !== 'function') throw new Error('缺少 fetchJSON');
     const index = validateIndex(await fetchJSON('data/index.json', ref, repo));
     const selected = index.days.slice(0, Math.max(1, Number(depth) || 7));
-    const results = await Promise.allSettled(selected.map(entry => fetchJSON(entry.path, ref, repo)));
+    const results = await allSettledLimit(selected, Math.max(1, concurrency), entry => fetchJSON(entry.path, ref, repo));
     const failures = [];
     const days = [];
     results.forEach((result, position) => {
       const entry = selected[position];
-      if (result.status === 'rejected') failures.push(`${entry.day}: ${result.reason && result.reason.message || '网络错误'}`);
+      if (result.status === 'rejected') failures.push({ day: entry.day, message: result.reason && result.reason.message || '网络错误' });
       else {
         try { days.push(validateDayFile(result.value, entry)); }
-        catch (error) { failures.push(`${entry.day}: ${error.message}`); }
+        catch (error) { failures.push({ day: entry.day, message: error.message }); }
       }
     });
-    if (failures.length) throw new Error(`中文归档加载失败：${failures.join('；')}`);
-    return { index, days };
+    const latestFailure = failures.find(failure => failure.day === selected[0].day);
+    if (latestFailure) throw new Error(`中文归档最新日加载失败：${latestFailure.day}: ${latestFailure.message}`);
+    return { index, days, failures };
   }
 
   async function loadUpstreamSnapshot({ fetchJSON, repo, ref = 'main' }) {

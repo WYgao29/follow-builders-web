@@ -347,7 +347,7 @@ const Mirrors = {
         updateMirrorStatus(`当前走「${this.label(kind)}」`);
         return json;
       } catch (e) {
-        lastErr = e;
+        lastErr = new Error(`${repo}/${path} @ ${kind}: ${e && e.message ? e.message : '网络失败'}`);
         if (pref === 'auto') this.coolUntil[repo + '|' + kind] = Date.now() + 5 * 60 * 1000;
       }
     }
@@ -426,6 +426,7 @@ let dayKeysCache = [];      // 最近一次渲染的全部日键（新→旧）
 let contentFilter = null;   // null | 'x' | 'podcasts' | 'blogs'（分类筛选视图）
 let pendingBackfill = false; // 回填进行中又调大了深度 → 完成后自动续跑
 let activeSource = 'zh';     // 当前数据来源（zh=中文归档仓库 / upstream=上游兜底）
+let loadWarning = null;      // 非致命分片失败或已启用上游兜底时给用户明确提示
 let langMode = Store.pref.lang || 'zh'; // 全局原文语言：zh=中文优先 / en=英文原文
 let currentReaderReopen = null;         // 阅读器打开时的重绘句柄（切换语言用）
 
@@ -916,6 +917,7 @@ function openBlogReader(b) {
 /* ---------- 拉取与合并 ---------- */
 async function fetchAllFeeds(fallbackMs) {
   const fetchJSON = (path, ref, repo) => Mirrors.fetchJSON(path, ref, repo);
+  loadWarning = null;
   let primaryError;
   try {
     const archive = await Core.loadChineseDays({
@@ -923,6 +925,9 @@ async function fetchAllFeeds(fallbackMs) {
     });
     let added = 0;
     for (const file of archive.days) added += DB.mergeDay(file);
+    if (archive.failures.length) {
+      loadWarning = `已加载最新内容；${archive.failures.length} 个较早日期暂时加载失败`;
+    }
     activeSource = 'zh';
     return added;
   } catch (error) {
@@ -933,6 +938,7 @@ async function fetchAllFeeds(fallbackMs) {
     const added = DB.mergeX(feeds.x, fallbackMs)
       + DB.mergePodcasts(feeds.podcasts, fallbackMs)
       + DB.mergeBlogs(feeds.blogs, fallbackMs);
+    loadWarning = '中文归档暂不可用，已显示上游英文完整快照';
     activeSource = 'upstream';
     return added;
   } catch (fallbackError) {
@@ -954,7 +960,9 @@ async function refreshCurrent({ silent } = {}) {
     DB.persist();
     render();
     const afterNewest = newestLoadedBatchDay();
-    if (afterNewest && afterNewest !== beforeNewest) {
+    if (loadWarning) {
+      showTransientNote(loadWarning);
+    } else if (afterNewest && afterNewest !== beforeNewest) {
       showTransientNote(`已更新「${dayTitle(afterNewest)}」的内容`);
     } else if (!silent || added) {
       setSync(null);
@@ -1052,7 +1060,7 @@ async function backfill() {
     ].filter(j => !doneMap.has(j.kind + ':' + j.sha));
 
     const total = jobs.length;
-    let done = 0;
+    const progress = { attempted: 0, succeeded: 0, failed: 0 };
     setSync(total ? `正在回填历史 0/${total}` : null);
     let oldestJobMs = Infinity;
     for (let i = 0; i < jobs.length; i += BACKFILL_CONCURRENCY) {
@@ -1064,23 +1072,24 @@ async function backfill() {
         } catch (e) { return null; } // 单个快照失败跳过
       }));
       for (const r of results) {
-        if (!r) continue;
+        progress.attempted++;
+        if (!r) { progress.failed++; continue; }
+        progress.succeeded++;
         if (r.job.kind === 'x') DB.mergeX(r.feed, r.job.ms);
         else if (r.job.kind === 'podcasts') DB.mergePodcasts(r.feed, r.job.ms);
         else DB.mergeBlogs(r.feed, r.job.ms);
         doneMap.set(r.job.kind + ':' + r.job.sha, r.job.kind + ':' + r.job.sha + ':' + dayKey(r.job.ms));
         oldestJobMs = Math.min(oldestJobMs, r.job.ms);
       }
-      done += chunk.length;
-      setSync(`正在回填历史 ${Math.min(done, total)}/${total}`);
-      prog.textContent = `已回填 ${done}/${total} 份历史快照`;
+      setSync(`正在回填历史 ${progress.attempted}/${total} · 成功 ${progress.succeeded} · 失败 ${progress.failed}`);
+      prog.textContent = `已成功回填 ${progress.succeeded}/${total} 份，失败 ${progress.failed} 份`;
       prog.classList.remove('hidden');
       Store.data.doneShas = [...doneMap.values()]; // 中断也不丢已完成进度
       DB.persist();
       // 注意：循环内不做全量渲染，避免用户阅读时页面反复跳动；结束后统一渲染
     }
 
-    if (jobs.length && !Number.isFinite(oldestJobMs)) throw new Error('历史快照全部加载失败');
+    if (jobs.length && progress.succeeded === 0) throw new Error(`历史快照全部加载失败（尝试 ${progress.attempted} 份）`);
     Store.data.doneShas = [...doneMap.values()];
     if (Number.isFinite(oldestJobMs)) {
       Store.data.oldestDay = Math.min(Store.data.oldestDay || Infinity, oldestJobMs);
@@ -1089,7 +1098,10 @@ async function backfill() {
     pruneOldDays(); // 滑动窗口修剪
     DB.persist();
     setSync(null);
-    prog.classList.add('hidden');
+    if (progress.failed) {
+      prog.textContent = `回填完成：成功 ${progress.succeeded} 份，失败 ${progress.failed} 份（稍后可重试）`;
+      prog.classList.remove('hidden');
+    } else prog.classList.add('hidden');
     render();
   } catch (e) {
     setSync(null);
