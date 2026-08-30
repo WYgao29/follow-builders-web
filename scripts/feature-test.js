@@ -192,6 +192,31 @@ async function main() {
   const jsDom = await evalJS(`document.querySelectorAll('a[href^="javascript:"]').length`);
   check('T10 安全：safeURL 拦截伪协议、放行 https', su && su.js === null && su.jsSpaces === null && su.data === null && su.ok === 'https://x.com/a' && jsDom === 0, JSON.stringify(su) + ' jsDom=' + jsDom);
 
+  // T13 无 Key 提示：按钮文案指向设置（先回时间线单日视图，摘要卡片只在那里）
+  await evalJS(`document.querySelector('#nav-home').click();`);
+  await wait(300);
+  await evalJS(`{ const p = JSON.parse(localStorage.getItem('fb.web.v3.pref') || '{}'); delete p.ai; localStorage.setItem('fb.web.v3.pref', JSON.stringify(p)); render(); }`);
+  await wait(200);
+  v = await evalJS(`({btn: document.querySelector('.summary-card .sum-btn').textContent, body: document.querySelector('.summary-card .sum-body').textContent})`);
+  check('T13 无 Key：按钮指向设置并给出引导', v && v.btn === '配置 AI 后生成' && /设置/.test(v.body), JSON.stringify(v));
+
+  // T14 配置 Key + mock AI 响应 → 生成并缓存摘要
+  await evalJS(`{ const p = JSON.parse(localStorage.getItem('fb.web.v3.pref') || '{}'); p.ai = { preset: 'deepseek', key: 'sk-test', model: 'deepseek-chat' }; localStorage.setItem('fb.web.v3.pref', JSON.stringify(p)); render(); }`);
+  await wait(200);
+  await evalJS(`
+    window.__realFetch = window.fetch;
+    window.fetch = (u, o) => String(u).includes('/chat/completions')
+      ? Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: '**模拟摘要**：今天测试内容。' } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      : window.__realFetch(u, o);
+  `);
+  v = await evalJS(`({prompt: buildDayPrompt({ posts: [...DB.posts.values()].slice(0, 3), episodes: [], blogs: [] }).includes('第 0 天 推文')})`);
+  check('T14a 提示词组装包含当日内容', v && v.prompt === true, JSON.stringify(v));
+  await evalJS(`document.querySelector('.summary-card .sum-btn').click();`);
+  await wait(1200);
+  v = await evalJS(`({body: document.querySelector('.summary-card .sum-body').textContent, saved: !!(Store.data.summaries || {})[currentDayKey]})`);
+  check('T14b 生成摘要：渲染并缓存', v && /模拟摘要/.test(v.body) && v.saved === true, JSON.stringify(v));
+  await evalJS(`window.fetch = window.__realFetch;`);
+
   // T11 Esc 关闭抽屉
   await evalJS(`document.querySelector('#btn-menu').click();`);
   await wait(200);

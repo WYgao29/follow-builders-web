@@ -116,6 +116,20 @@
     </div>
 
     <div class="sheet-section">
+      <h3>AI 摘要（可选，自带 Key）</h3>
+      <div class="seg" id="ai-preset-seg">
+        <button data-ai="deepseek" class="active">DeepSeek</button>
+        <button data-ai="zhipu">智谱 GLM</button>
+        <button data-ai="moonshot">Moonshot</button>
+        <button data-ai="openai">OpenAI</button>
+        <button data-ai="anthropic">Anthropic</button>
+      </div>
+      <input id="ai-key" class="sheet-input" type="password" placeholder="API Key（只保存在本机浏览器）" autocomplete="off">
+      <input id="ai-model" class="sheet-input" placeholder="模型名（留空用服务商默认）" autocomplete="off">
+      <p class="hint">Key 仅保存在本机，请求由浏览器直连所选服务商。国内推荐 DeepSeek 或智谱 GLM（可直连、便宜，GLM-Flash 免费）。</p>
+    </div>
+
+    <div class="sheet-section">
       <h3>数据</h3>
       <a id="btn-about" class="btn-outline" href="about.html">了解这 26 位信息源是谁 →</a>
       <button id="btn-wipe" class="btn-danger">清空本地缓存</button>
