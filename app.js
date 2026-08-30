@@ -1,17 +1,15 @@
 /* Follow Builders Web — 数据与交互逻辑
- * 数据流与 iOS 版一致：GitHub 上的三个公开 feed JSON → 去重合并 → 按本地日历日分组。
+ * 主数据源：zaolangzhe-data v2 日分片；整体失败时降级到上游完整快照。
  * 镜像策略：GitHub 直连优先，失败自动切 jsDelivr（可手动锁定）。
  */
 'use strict';
 
+const Core = globalThis.FBDataCore;
+if (!Core) throw new Error('data-core.js 未加载');
 const UPSTREAM_REPO = 'zarazhangrui/follow-builders'; // 上游原始数据（兜底）
 const ZH_REPO = 'WYgao29/zaolangzhe-data';            // 中文归档数据集（优先）
-const DATA_SOURCES = [
-  { id: 'zh', repo: ZH_REPO },
-  { id: 'upstream', repo: UPSTREAM_REPO },
-];
 const REF_MAIN = 'main';
-const PATHS = { x: 'feed-x.json', podcasts: 'feed-podcasts.json', blogs: 'feed-blogs.json' };
+const PATHS = Core.UPSTREAM_PATHS;
 const API_COMMITS = 'https://api.github.com/repos/' + UPSTREAM_REPO + '/commits'; // 回填历史永远走上游
 const REFRESH_MIN_INTERVAL = 3600 * 1000;
 const BACKFILL_CONCURRENCY = 3;
@@ -65,17 +63,12 @@ function countFmt(n) {
 /* 链接白名单：feed 内容是第三方数据，只放行 http(s)，
  * 杜绝 javascript: 等伪协议注入 */
 function safeURL(u) {
-  if (typeof u !== 'string' || !u.trim()) return null;
-  try {
-    const url = new URL(u, location.href);
-    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
-  } catch (e) { /* 非法链接按无链接处理 */ }
-  return null;
+  return Core.safeURL(u);
 }
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v4', // v4：数据源切换为中文归档仓库（digest 预生成，不再本地 AI 生成）
+  KEY: 'fb.web.v5', // v5：只接受中文数据仓 v2 日分片契约
   data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
@@ -201,6 +194,51 @@ const DB = {
     }
     return added;
   },
+
+  mergeDay(file) {
+    let added = 0;
+    for (const item of file.x) {
+      const ms = parseDate(item.createdAt);
+      if (ms == null) continue;
+      const normalized = {
+        ...item,
+        text: decodeEntities(item.text || ''), textZh: decodeEntities(item.textZh || ''),
+        builder: decodeEntities(item.builder || item.handle), bio: decodeEntities(item.bio || ''),
+        ms, batchDay: file.day,
+      };
+      const existing = this.posts.get(item.id);
+      this.posts.set(item.id, existing ? Core.mergeRichItem('x', existing, normalized) : normalized);
+      this.builderName.set(item.handle, { name: normalized.builder, bio: normalized.bio });
+      if (!existing) added++;
+    }
+    for (const item of file.podcasts) {
+      const ms = parseDate(item.publishedAt) ?? parseDate(file.generatedAt) ?? Date.now();
+      const normalized = {
+        ...item,
+        show: decodeEntities(item.name || '未知节目'), title: decodeEntities(item.title || '未命名单集'),
+        titleZh: decodeEntities(item.titleZh || ''), summaryZh: decodeEntities(item.summaryZh || ''),
+        transcript: decodeEntities(item.transcript || ''), ms, batchDay: file.day,
+      };
+      const existing = this.episodes.get(item.guid);
+      this.episodes.set(item.guid, existing ? Core.mergeRichItem('podcasts', existing, normalized) : normalized);
+      if (!existing) added++;
+    }
+    for (const item of file.blogs) {
+      const ms = parseDate(item.publishedAt) ?? parseDate(file.generatedAt) ?? Date.now();
+      const normalized = {
+        ...item,
+        source: decodeEntities(item.name || '未知来源'), title: decodeEntities((item.title || '未命名文章').trim()),
+        titleZh: decodeEntities(item.titleZh || ''), author: decodeEntities(item.author || ''),
+        summary: decodeEntities(item.description || ''), content: decodeEntities(item.content || ''),
+        contentZh: decodeEntities(item.contentZh || ''), summaryZh: decodeEntities(item.summaryZh || ''),
+        publishedText: item.publishedAt || '', ms, batchDay: file.day,
+      };
+      const existing = this.blogs.get(item.url);
+      this.blogs.set(item.url, existing ? Core.mergeRichItem('blogs', existing, normalized) : normalized);
+      if (!existing) added++;
+    }
+    return added;
+  },
 };
 
 /* ---------- 日期解析（多格式容错，与 iOS 版对齐） ---------- */
@@ -236,20 +274,20 @@ function parseDate(raw) {
 const Mirrors = {
   order: ['github', 'jsdelivr'],
   url(kind, repo, ref, path) {
-    if (kind === 'github') return `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
-    return `https://cdn.jsdelivr.net/gh/${repo}@${ref}/${path}`;
+    return Core.buildSourceURL(kind, repo, ref, path);
   },
   label(kind) { return kind === 'github' ? 'GitHub 直连' : 'jsDelivr'; },
 
   async fetchJSON(path, ref, repo) {
     const pref = Store.pref.mirror || 'auto';
     const now = Date.now();
+    const active = this.active[repo];
     let cand = pref === 'auto'
-      ? (this.active ? [this.active, ...this.order.filter(k => k !== this.active)] : [...this.order])
+      ? (active ? [active, ...this.order.filter(k => k !== active)] : [...this.order])
       : [pref];
     if (pref === 'auto') {
       // 冷却中的线路排到队尾（失败过一次 5 分钟内不再优先尝试）
-      cand.sort((a, b) => ((this.coolUntil[a] || 0) < now ? 0 : 1) - ((this.coolUntil[b] || 0) < now ? 0 : 1));
+      cand.sort((a, b) => ((this.coolUntil[Core.mirrorKey(repo, a)] || 0) < now ? 0 : 1) - ((this.coolUntil[Core.mirrorKey(repo, b)] || 0) < now ? 0 : 1));
     }
     let lastErr;
     for (const kind of cand) {
@@ -266,8 +304,8 @@ const Mirrors = {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const json = await res.json();
         if (pref === 'auto') {
-          this.active = kind;
-          delete this.coolUntil[kind];
+          this.active[repo] = kind;
+          delete this.coolUntil[Core.mirrorKey(repo, kind)];
         }
         updateMirrorStatus(`当前走「${this.label(kind)}」`);
         return json;
@@ -280,7 +318,7 @@ const Mirrors = {
     throw lastErr || new Error('网络失败');
   },
 };
-Mirrors.active = null;
+Mirrors.active = {};
 Mirrors.coolUntil = {};
 
 /* ---------- 转录解析（与 iOS 版同一规则） ---------- */
@@ -505,7 +543,9 @@ function keyToMs(key) {
 function pruneOldDays() {
   if (!DB.posts.size && !DB.episodes.size && !DB.blogs.size) return;
   const depth = Store.pref.depth || 7;
-  const cutoffKey = dayKey(keyToMs(expectedBatchDayLocal()) - (depth - 1) * 86400000);
+  const newest = newestLoadedBatchDay();
+  if (!newest) return;
+  const cutoffKey = dayKey(keyToMs(newest) - (depth - 1) * 86400000);
   let removed = false;
   const drop = (map) => {
     for (const [k, it] of [...map]) {
@@ -545,13 +585,8 @@ function newestLoadedBatchDay() {
 let lastBatchCheck = 0;
 async function ensureFreshBatch() {
   if (!DB.posts.size || syncBusy) return;
-  const expected = expectedBatchDayLocal();
-  const have = newestLoadedBatchDay();
-  const due = have === null || have < expected;                       // 该有新批次了
-  const stale = Date.now() - (Store.data.lastRefresh || 0) > REFRESH_MIN_INTERVAL; // 兜底：超 1 小时
-  if (!due && !stale) return;
-  // 设备时钟偏差可能导致"以为有新批次"反复空拉：批次检查 10 分钟内最多尝试一次
-  if (due && !stale && Date.now() - lastBatchCheck < 10 * 60 * 1000) return;
+  const stale = Date.now() - (Store.data.lastRefresh || 0) > REFRESH_MIN_INTERVAL;
+  if (!stale || Date.now() - lastBatchCheck < 10 * 60 * 1000) return;
   lastBatchCheck = Date.now();
   await refreshCurrent({ silent: true });
 }
@@ -837,23 +872,30 @@ function openBlogReader(b) {
 
 /* ---------- 拉取与合并 ---------- */
 async function fetchAllFeeds(fallbackMs) {
-  // 优先中文归档仓库（全量归档，一次到位）；整体失败降级到上游当前快照
-  for (const src of DATA_SOURCES) {
-    const [x, podcasts, blogs] = await Promise.all([
-      Mirrors.fetchJSON(PATHS.x, 'main', src.repo).catch(() => null),
-      Mirrors.fetchJSON(PATHS.podcasts, 'main', src.repo).catch(() => null),
-      Mirrors.fetchJSON(PATHS.blogs, 'main', src.repo).catch(() => null),
-    ]);
-    if (!x && !podcasts && !blogs) continue;
+  const fetchJSON = (path, ref, repo) => Mirrors.fetchJSON(path, ref, repo);
+  let primaryError;
+  try {
+    const archive = await Core.loadChineseDays({
+      fetchJSON, repo: ZH_REPO, ref: REF_MAIN, depth: Store.pref.depth || 7,
+    });
     let added = 0;
-    if (x) added += DB.mergeX(x, fallbackMs);
-    if (podcasts) added += DB.mergePodcasts(podcasts, fallbackMs);
-    if (blogs) added += DB.mergeBlogs(blogs, fallbackMs);
-    activeSource = src.id;
+    for (const file of archive.days) added += DB.mergeDay(file);
+    activeSource = 'zh';
     return added;
+  } catch (error) {
+    primaryError = error;
   }
-  activeSource = 'none';
-  return 0;
+  try {
+    const feeds = await Core.loadUpstreamSnapshot({ fetchJSON, repo: UPSTREAM_REPO, ref: REF_MAIN });
+    const added = DB.mergeX(feeds.x, fallbackMs)
+      + DB.mergePodcasts(feeds.podcasts, fallbackMs)
+      + DB.mergeBlogs(feeds.blogs, fallbackMs);
+    activeSource = 'upstream';
+    return added;
+  } catch (fallbackError) {
+    activeSource = 'none';
+    throw new Error(`中文归档不可用（${primaryError.message}）；上游兜底不可用（${fallbackError.message}）`);
+  }
 }
 
 async function refreshCurrent({ silent } = {}) {
@@ -889,6 +931,10 @@ async function refreshCurrent({ silent } = {}) {
   } finally {
     syncBusy = false;
     $('#btn-refresh').disabled = false;
+    if (pendingBackfill) {
+      pendingBackfill = false;
+      setTimeout(() => refreshCurrent({ silent: true }), 0);
+    }
   }
 }
 
@@ -970,7 +1016,7 @@ async function backfill() {
       const chunk = jobs.slice(i, i + BACKFILL_CONCURRENCY);
       const results = await Promise.all(chunk.map(async (job) => {
         try {
-          const feed = await Mirrors.fetchJSON(PATHS[job.kind], job.sha);
+          const feed = await Mirrors.fetchJSON(PATHS[job.kind], job.sha, UPSTREAM_REPO);
           return { job, feed };
         } catch (e) { return null; } // 单个快照失败跳过
       }));
@@ -991,6 +1037,7 @@ async function backfill() {
       // 注意：循环内不做全量渲染，避免用户阅读时页面反复跳动；结束后统一渲染
     }
 
+    if (jobs.length && !Number.isFinite(oldestJobMs)) throw new Error('历史快照全部加载失败');
     Store.data.doneShas = [...doneMap.values()];
     if (Number.isFinite(oldestJobMs)) {
       Store.data.oldestDay = Math.min(Store.data.oldestDay || Infinity, oldestJobMs);
@@ -1012,7 +1059,8 @@ async function backfill() {
     // 回填期间又调大了深度 → 自动续跑补齐新区间（一次）
     if (pendingBackfill) {
       pendingBackfill = false;
-      backfill();
+      if (activeSource === 'upstream') backfill();
+      else refreshCurrent({ silent: true });
     }
   }
 }
@@ -1103,7 +1151,7 @@ function bind() {
     const b = e.target.closest('button[data-mirror]');
     if (!b) return;
     Store.setPref({ mirror: b.dataset.mirror });
-    Mirrors.active = null;
+    Mirrors.active = {};
     for (const x of document.querySelectorAll('#mirror-seg button'))
       x.classList.toggle('active', x === b);
     refreshCurrent();
@@ -1117,9 +1165,9 @@ function bind() {
     for (const x of document.querySelectorAll('#depth-seg button'))
       x.classList.toggle('active', x === b);
     updateBackfillButton();
-    // 深度调大 → 自动补拉新增区间；回填进行中则排队，结束后自动续跑
+    // 深度调大 → 重新读取更多 v2 日分片；加载进行中则排队。
     if (Number(b.dataset.depth) > prev) {
-      if (!syncBusy) backfill();
+      if (!syncBusy) refreshCurrent();
       else pendingBackfill = true;
     } else if (Number(b.dataset.depth) < prev) {
       pruneOldDays(); // 深度调小 → 立即按新窗口修剪
@@ -1133,7 +1181,7 @@ function bind() {
     DB.posts.clear(); DB.episodes.clear(); DB.blogs.clear(); DB.builderName.clear();
     // 同步重置视图与线路状态
     contentFilter = null; currentDayKey = null; pendingBackfill = false;
-    Mirrors.active = null; Mirrors.coolUntil = {};
+    Mirrors.active = {}; Mirrors.coolUntil = {};
     $('#backfill-progress').classList.add('hidden');
     document.body.classList.remove('filter-mode');
     closeSettings();

@@ -22,17 +22,11 @@ function getJSON(path) {
 }
 
 /* 生成 10 天合成数据：3 位构建者 × 每天 2 条推文（一条带中文译文）+ 播客 + 博客 */
-/* 与产品一致的批次窗口计算：expected 批次日 往前推 depth-1 天为截止线 */
+/* v2 窗口按 index 从新到旧精确选取 depth 个日分片。 */
 function windowKept(allDays, depth) {
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
-  const now = new Date();
-  const snap = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 28, 0, 0));
-  const ref = now >= snap ? snap : new Date(snap.getTime() - 86400000);
-  const expected = dayKey(ref.getTime());
-  const [y, m, d0] = expected.split('-').map(Number);
-  const cutoff = dayKey(new Date(y, m - 1, d0, 12).getTime() - (depth - 1) * 86400000);
-  const kept = allDays.filter(d => d >= cutoff).length;
+  const selected = [...allDays].sort().reverse().slice(0, depth);
+  const kept = selected.length;
+  const cutoff = selected[selected.length - 1];
   return { kept, cutoff };
 }
 
@@ -131,8 +125,8 @@ async function main() {
   // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
   const seeded = await evalJS(`(() => {
     localStorage.clear();
-    localStorage.setItem('fb.web.v4', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
-    localStorage.setItem('fb.web.v4.pref', JSON.stringify({ depth: 7 }));
+    localStorage.setItem('fb.web.v5', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
+    localStorage.setItem('fb.web.v5.pref', JSON.stringify({ depth: 7 }));
     return 'seeded';
   })()`);
   console.log('播种:', seeded);
