@@ -96,17 +96,20 @@ const SEED_SCRIPT = `
     : realFetch(u, o);
 `;
 
+let mainChrome = null;
 async function main() {
   const profile = '/tmp/fb-feature-profile-' + Date.now();
-  const chrome = execFile(CHROME, [
+  const chrome = mainChrome = execFile(CHROME, [
     '--headless=new', '--disable-gpu', '--no-first-run',
     `--user-data-dir=${profile}`,
     `--remote-debugging-port=${CDP_PORT}`,
     '--window-size=390,844', '--hide-scrollbars', 'about:blank',
   ]);
   let targets = null;
-  for (let i = 0; i < 40; i++) { await wait(250); try { targets = await getJSON('/json/list'); break; } catch (e) {} }
+  for (let i = 0; i < 80; i++) { await wait(250); try { targets = await getJSON('/json/list'); break; } catch (e) {} }
+  if (!targets || !targets.length) { console.error('❌ CDP 未就绪（Chrome 启动失败或端口占用）'); chrome.kill(); process.exit(1); }
   const page = targets.find(t => t.type === 'page');
+  if (!page) { console.error('❌ 未找到页面目标'); chrome.kill(); process.exit(1); }
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise(r => ws.onopen = r);
   let id = 0; const pending = new Map();
@@ -227,13 +230,23 @@ async function main() {
   v = await evalJS(`({callAI: typeof callAI !== 'undefined', AI_CONFIG: typeof AI_CONFIG !== 'undefined', genBtn: !!document.querySelector('.sum-btn')})`);
   check('T12 无客户端 AI 调用残留', v && v.callAI === false && v.AI_CONFIG === false && v.genBtn === false, JSON.stringify(v));
 
-  // T13 Esc 关闭抽屉
+  // T12b 清空缓存：确认数据立即清空（离线不验证后续自动重载，那需要网络）
+  await evalJS(`window.confirm = () => true;`);
+  await evalJS(`document.querySelector('#btn-settings').click();`);
+  await wait(300);
+  await evalJS(`document.querySelector('#btn-wipe').click();`);
+  await wait(800);
+  v = await evalJS(`({posts: DB.posts.size, days: dayKeysCache.length, emptyVisible: !document.querySelector('#empty-state').classList.contains('hidden')})`);
+  check('T12b 清空缓存：数据立即清空', v && v.posts === 0 && v.days === 0, JSON.stringify(v));
+
+  // T13 Esc 关闭抽屉（先确认已打开，避免"从未打开→恒隐藏"的假通过）
   await evalJS(`document.querySelector('#btn-menu').click();`);
-  await wait(200);
+  await wait(300);
+  const opened = await evalJS(`!document.querySelector('#drawer-mask').classList.contains('hidden')`);
   await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`);
-  await wait(200);
-  v = await evalJS(`document.querySelector('#drawer-mask').classList.contains('hidden')`);
-  check('T13 Esc 关闭侧边栏', v === true, String(v));
+  await wait(300);
+  const closed = await evalJS(`document.querySelector('#drawer-mask').classList.contains('hidden')`);
+  check('T13 Esc 关闭侧边栏', opened === true && closed === true, `打开=${opened}, 关闭=${closed}`);
 
   const failed = results.filter(r => !r[1]).length;
   console.log(`\n===== 汇总：${results.length - failed}/${results.length} 通过 =====`);
@@ -241,4 +254,8 @@ async function main() {
   process.exit(failed ? 1 : 0);
 }
 
-main().catch(e => { console.error('TEST-ERR', e); process.exit(1); });
+main().catch(e => {
+  console.error('TEST-ERR', e);
+  if (mainChrome) { try { mainChrome.kill(); } catch (e2) {} }
+  process.exit(1);
+});
