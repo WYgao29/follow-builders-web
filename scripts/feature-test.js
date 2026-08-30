@@ -192,16 +192,14 @@ async function main() {
   const jsDom = await evalJS(`document.querySelectorAll('a[href^="javascript:"]').length`);
   check('T10 安全：safeURL 拦截伪协议、放行 https', su && su.js === null && su.jsSpaces === null && su.data === null && su.ok === 'https://x.com/a' && jsDom === 0, JSON.stringify(su) + ' jsDom=' + jsDom);
 
-  // T13 无 Key 提示：按钮文案指向设置（先回时间线单日视图，摘要卡片只在那里）
+  // T13 内置智谱配置：回时间线，按钮为“生成 AI 摘要”
   await evalJS(`document.querySelector('#nav-home').click();`);
   await wait(300);
-  await evalJS(`{ const p = JSON.parse(localStorage.getItem('fb.web.v3.pref') || '{}'); delete p.ai; localStorage.setItem('fb.web.v3.pref', JSON.stringify(p)); render(); }`);
-  await wait(200);
-  v = await evalJS(`({btn: document.querySelector('.summary-card .sum-btn').textContent, body: document.querySelector('.summary-card .sum-body').textContent})`);
-  check('T13 无 Key：按钮指向设置并给出引导', v && v.btn === '配置 AI 后生成' && /设置/.test(v.body), JSON.stringify(v));
+  v = await evalJS(`({btn: document.querySelector('.summary-card .sum-btn').textContent, keyLen: AI_CONFIG.key.length, model: AI_CONFIG.model})`);
+  check('T13 内置智谱配置：glm-5.3-flash + Key 已内置', v && v.btn === '生成 AI 摘要' && v.keyLen > 20 && /glm-5/.test(v.model), JSON.stringify(v));
 
   // T14 配置 Key + mock AI 响应 → 生成并缓存摘要
-  await evalJS(`{ const p = JSON.parse(localStorage.getItem('fb.web.v3.pref') || '{}'); p.ai = { preset: 'deepseek', key: 'sk-test', model: 'deepseek-chat' }; localStorage.setItem('fb.web.v3.pref', JSON.stringify(p)); render(); }`);
+  await evalJS(`render();`);
   await wait(200);
   await evalJS(`
     window.__realFetch = window.fetch;

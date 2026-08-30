@@ -333,51 +333,23 @@ function renderBlogContent(container, text) {
   flush();
 }
 
-/* ---------- AI 摘要（自带 Key，浏览器直连服务商） ---------- */
-const AI_PRESETS = {
-  deepseek:  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat', flavor: 'openai' },
-  zhipu:     { name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash', flavor: 'openai' },
-  moonshot:  { name: 'Moonshot', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', flavor: 'openai' },
-  openai:    { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', flavor: 'openai' },
-  anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-20250514', flavor: 'anthropic' },
-  custom:    { name: '自定义', baseUrl: '', model: '', flavor: 'openai' },
+/* ---------- AI 摘要（智谱 GLM，浏览器直连） ---------- */
+const AI_CONFIG = {
+  baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+  model: 'glm-5.3-flash',
+  key: 'c61238f530ea4e15b6dca32225127ce1.K0wECpOS9hctgN4o',
 };
-
-function aiConfig() {
-  const pref = Store.pref.ai || {};
-  const preset = AI_PRESETS[pref.preset] || AI_PRESETS.deepseek;
-  return {
-    flavor: preset.flavor,
-    baseUrl: (pref.baseUrl || preset.baseUrl || '').replace(/\/+$/, ''),
-    model: pref.model || preset.model,
-    key: pref.key || '',
-  };
-}
 
 const SUMMARY_SYSTEM = '你是「造浪者」日报编辑。基于用户提供的当天采集内容，用中文输出一份简明日报：先用一句话点出当天最重要的动向；再按【播客】【X 推文】【博客】分节（没有内容的节跳过），每条 1-2 句中文摘要并保留原文链接；只基于给定材料，不编造、不猜测；直接输出 Markdown 正文。';
 
-async function callAI(cfg, system, user) {
+async function callAI(system, user) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 120000);
+  const timer = setTimeout(() => ctrl.abort(), 180000);
   try {
-    if (cfg.flavor === 'anthropic') {
-      const res = await fetch(cfg.baseUrl + '/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json', 'x-api-key': cfg.key,
-          'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({ model: cfg.model, max_tokens: 2000, system, messages: [{ role: 'user', content: user }] }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 120));
-      const data = await res.json();
-      return (data.content && data.content[0] && data.content[0].text) || '';
-    }
-    const res = await fetch(cfg.baseUrl + '/chat/completions', {
+    const res = await fetch(AI_CONFIG.baseUrl + '/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
-      body: JSON.stringify({ model: cfg.model, temperature: 0.3, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AI_CONFIG.key },
+      body: JSON.stringify({ model: AI_CONFIG.model, temperature: 0.3, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
       signal: ctrl.signal,
     });
     if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 120));
@@ -759,13 +731,12 @@ function render() {
 
 /* ---------- AI 摘要卡片 ---------- */
 function appendSummary(section, batchDay, g) {
-  const cfg = aiConfig();
   const saved = (Store.data.summaries || {})[batchDay];
   const card = el('div', 'summary-card');
   const head = el('div', 'sum-head');
   head.appendChild(el('span', 'sum-label', '✨ AI 摘要'));
   const actions = el('div', 'sum-actions');
-  const btn = el('button', 'sum-btn', saved ? '重新生成' : (cfg.key ? '生成 AI 摘要' : '配置 AI 后生成'));
+  const btn = el('button', 'sum-btn', saved ? '重新生成' : '生成 AI 摘要');
   actions.appendChild(btn);
   if (saved) {
     const del = el('button', 'sum-btn', '删除');
@@ -778,20 +749,15 @@ function appendSummary(section, batchDay, g) {
   card.appendChild(head);
 
   const body = el('div', 'sum-body');
-  if (saved) {
-    renderBlogContent(body, saved);
-  } else if (!cfg.key) {
-    body.appendChild(el('p', 'sum-hint', '在「设置 → AI 摘要」里填入 API Key，即可一键把当天内容变成中文日报。'));
-  }
+  if (saved) renderBlogContent(body, saved);
   card.appendChild(body);
 
   btn.addEventListener('click', async () => {
-    if (!cfg.key) { openSettings(); return; }
     btn.disabled = true;
     body.textContent = '';
-    body.appendChild(el('p', 'sum-hint', '正在生成摘要…（约 10-30 秒，取决于服务商）'));
+    body.appendChild(el('p', 'sum-hint', '正在生成摘要…（GLM-5.3-Flash，通常 30-90 秒）'));
     try {
-      const text = await callAI(cfg, SUMMARY_SYSTEM, buildDayPrompt(g));
+      const text = await callAI(SUMMARY_SYSTEM, buildDayPrompt(g));
       if (!text.trim()) throw new Error('AI 返回为空');
       (Store.data.summaries || {})[batchDay] = text;
       Store.save();
@@ -1141,28 +1107,6 @@ function bind() {
     if (e.target === $('#settings-mask')) closeSettings();
   });
   $('#reader-close').addEventListener('click', closeReader);
-
-  // AI 摘要设置
-  const aiPref = Store.pref.ai || {};
-  const keyInput = $('#ai-key');
-  const modelInput = $('#ai-model');
-  keyInput.value = aiPref.key || '';
-  modelInput.value = aiPref.model || '';
-  if (aiPref.preset) {
-    for (const b of document.querySelectorAll('#ai-preset-seg button'))
-      b.classList.toggle('active', b.dataset.ai === aiPref.preset);
-  }
-  $('#ai-preset-seg').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-ai]');
-    if (!b) return;
-    Store.setPref({ ai: Object.assign(Store.pref.ai || {}, { preset: b.dataset.ai }) });
-    const preset = AI_PRESETS[b.dataset.ai];
-    if (preset) modelInput.placeholder = '模型名（默认 ' + preset.model + '）';
-    for (const x of document.querySelectorAll('#ai-preset-seg button'))
-      x.classList.toggle('active', x === b);
-  });
-  keyInput.addEventListener('change', () => Store.setPref({ ai: Object.assign(Store.pref.ai || {}, { key: keyInput.value.trim() }) }));
-  modelInput.addEventListener('change', () => Store.setPref({ ai: Object.assign(Store.pref.ai || {}, { model: modelInput.value.trim() }) }));
 
   $('#mirror-seg').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-mirror]');
