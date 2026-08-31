@@ -22,11 +22,52 @@ function index(days) {
   };
 }
 
+test('loader accepts matching v2 and v3 archives during cutover', () => {
+  for (const schemaVersion of [2, 3]) {
+    const file = { ...day('2026-08-30'), schemaVersion };
+    const archiveIndex = {
+      schemaVersion,
+      generatedAt: file.generatedAt,
+      days: [{
+        day: file.day,
+        path: `data/days/${file.day}.json`,
+        counts: { x: 1, podcasts: 0, blogs: 0 },
+      }],
+    };
+    assert.equal(Core.validateIndex(archiveIndex).schemaVersion, schemaVersion);
+    assert.equal(Core.validateDayFile(file, archiveIndex.days[0], schemaVersion).schemaVersion, schemaVersion);
+  }
+});
+
+test('loader rejects unsupported and mixed archive versions', () => {
+  assert.throws(
+    () => Core.validateIndex({ schemaVersion: 4, days: [] }),
+    /v2 或 v3/,
+  );
+  const file = { ...day('2026-08-30'), schemaVersion: 2 };
+  const entry = { day: file.day, counts: { x: 1, podcasts: 0, blogs: 0 } };
+  assert.throws(() => Core.validateDayFile(file, entry, 3), /版本不一致/);
+  assert.throws(
+    () => Core.validateDayFile({ ...file, schemaVersion: 4 }, entry),
+    /v2 或 v3/,
+  );
+});
+
 test('safeURL only permits explicit HTTP and HTTPS URLs', () => {
   assert.equal(Core.safeURL('https://example.com/a'), 'https://example.com/a');
   assert.equal(Core.safeURL('http://example.com/a'), 'http://example.com/a');
   assert.equal(Core.safeURL('javascript:alert(1)'), null);
   assert.equal(Core.safeURL('/relative'), null);
+});
+
+test('stripLegacyTranslations returns a clean copy for v2 compatibility data', () => {
+  const source = {
+    id: '1', text: 'Original', summaryZh: '总结',
+    textZh: '旧推文翻译', titleZh: '旧标题翻译', contentZh: '旧正文翻译', transcriptZh: '旧转录翻译',
+  };
+  const clean = Core.stripLegacyTranslations(source);
+  assert.deepEqual(clean, { id: '1', text: 'Original', summaryZh: '总结' });
+  assert.equal(source.textZh, '旧推文翻译');
 });
 
 test('mirror state keys include repository and mirror kind', () => {
@@ -85,10 +126,10 @@ test('loadUpstreamSnapshot requires all three feeds and passes the repository ex
   assert.ok(calls.every(value => value.repo === 'owner/upstream'));
 });
 
-test('mergeRichItem fills gaps without replacing richer translations', () => {
-  const older = { id: '1', text: 'Original', textZh: '完整中文', likes: 1 };
-  const newer = { id: '1', text: 'Original updated', textZh: '', likes: 5 };
+test('mergeRichItem fills gaps without replacing a richer summary', () => {
+  const older = { id: '1', text: 'Original', summaryZh: '完整总结', likes: 1 };
+  const newer = { id: '1', text: 'Original updated', summaryZh: '', likes: 5 };
   assert.deepEqual(Core.mergeRichItem('x', older, newer), {
-    id: '1', text: 'Original updated', textZh: '完整中文', likes: 5,
+    id: '1', text: 'Original updated', summaryZh: '完整总结', likes: 5,
   });
 });

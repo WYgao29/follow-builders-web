@@ -7,6 +7,8 @@
 
   const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
   const KINDS = ['x', 'podcasts', 'blogs'];
+  const ARCHIVE_VERSIONS = new Set([2, 3]);
+  const LEGACY_TRANSLATION_FIELDS = ['textZh', 'titleZh', 'contentZh', 'transcriptZh'];
   const UPSTREAM_PATHS = {
     x: 'feed-x.json',
     podcasts: 'feed-podcasts.json',
@@ -26,6 +28,12 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function stripLegacyTranslations(item) {
+    const clean = { ...(item || {}) };
+    for (const field of LEGACY_TRANSLATION_FIELDS) delete clean[field];
+    return clean;
   }
 
   function mirrorKey(repo, kind) {
@@ -56,8 +64,8 @@
   }
 
   function validateIndex(index) {
-    if (!index || index.schemaVersion !== 2 || !Array.isArray(index.days) || index.days.length === 0) {
-      throw new Error('中文归档 index 不是有效的 v2 数据');
+    if (!index || !ARCHIVE_VERSIONS.has(index.schemaVersion) || !Array.isArray(index.days) || index.days.length === 0) {
+      throw new Error('中文归档 index 不是有效的 v2 或 v3 数据');
     }
     const seen = new Set();
     let previous = null;
@@ -78,9 +86,12 @@
     return index;
   }
 
-  function validateDayFile(file, entry) {
-    if (!file || file.schemaVersion !== 2 || file.day !== entry.day) {
-      throw new Error(`${entry.day} 日分片与 index 不一致`);
+  function validateDayFile(file, entry, schemaVersion = null) {
+    if (!file || !ARCHIVE_VERSIONS.has(file.schemaVersion)) {
+      throw new Error(`${entry.day} 日分片不是有效的 v2 或 v3 数据`);
+    }
+    if ((schemaVersion !== null && file.schemaVersion !== schemaVersion) || file.day !== entry.day) {
+      throw new Error(`${entry.day} 日分片版本不一致`);
     }
     for (const kind of KINDS) {
       if (!Array.isArray(file[kind])) throw new Error(`${entry.day} ${kind} 不是数组`);
@@ -121,7 +132,7 @@
       const entry = selected[position];
       if (result.status === 'rejected') failures.push({ day: entry.day, message: result.reason && result.reason.message || '网络错误' });
       else {
-        try { days.push(validateDayFile(result.value, entry)); }
+        try { days.push(validateDayFile(result.value, entry, index.schemaVersion)); }
         catch (error) { failures.push({ day: entry.day, message: error.message }); }
       }
     });
@@ -149,6 +160,7 @@
     KINDS,
     UPSTREAM_PATHS,
     safeURL,
+    stripLegacyTranslations,
     mirrorKey,
     buildSourceURL,
     mergeRichItem,

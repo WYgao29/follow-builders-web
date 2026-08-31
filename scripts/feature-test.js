@@ -26,7 +26,7 @@ function getJSON(path) {
   });
 }
 
-/* 生成 10 天合成数据：3 位构建者 × 每天 2 条推文（一条带中文译文）+ 播客 + 博客 */
+/* 生成 10 天合成数据：3 位构建者 × 每天 2 条推文（一条带中文总结）+ 播客 + 博客 */
 /* v2 窗口按 index 从新到旧精确选取 depth 个日分片。 */
 function windowKept(allDays, depth) {
   const selected = [...allDays].sort().reverse().slice(0, depth);
@@ -54,7 +54,9 @@ function seedData() {
       for (let k = 0; k < 2; k++) {
         posts.push({
           id: `p${i}-${j}-${k}`, text: `Day ${i} tweet ${j}-${k}`, ms: ms - k * 3600000,
-          batchDay, textZh: k === 0 ? `中文推文·第${i}天·${j}` : '',
+          batchDay,
+          textZh: '不得显示的旧翻译',
+          summaryZh: k === 0 ? `真正总结·第${i}天·${j}` : '',
           url: k === 0 ? `https://x.com/${b.handle}/status/${i}${j}${k}` : '',
           likes: 10, retweets: 5, replies: 3,
           handle: b.handle, builder: b.builder, bio: b.bio,
@@ -63,7 +65,7 @@ function seedData() {
     }
     if (i === 1 || i === 3) {
       episodes.push({
-        guid: `e${i}`, show: '测试播客', title: `Episode ${i}`, titleZh: `单集中文标题 ${i}`,
+        guid: `e${i}`, show: '测试播客', title: `Episode ${i}`, titleZh: `不得显示的播客中文标题 ${i}`,
         url: 'https://example.com/watch', ms, batchDay,
         summaryZh: `要点摘要：第 ${i} 期测试播客的中文要点。`,
         transcript: 'Speaker 1 | 00:00 - 00:05\nHello world\nSpeaker 2 | 00:05 - 00:10\nHi there',
@@ -73,10 +75,10 @@ function seedData() {
       const withZh = i === 2;
       blogs.push({
         url: `https://example.com/post/${i}`, source: '测试博客',
-        title: `Post ${i}`, titleZh: withZh ? `文章中文标题 ${i}` : '',
+        title: `Post ${i}`, titleZh: withZh ? `不得显示的文章中文标题 ${i}` : '',
         ms, batchDay, author: '作者', summary: 'English summary',
         content: withZh ? `English body of post ${i} with [a link](https://example.com).` : `Plain english body ${i}.`,
-        contentZh: withZh ? `这是 **第 ${i} 篇** 的中文全文翻译。` : '',
+        contentZh: withZh ? `不得显示的中文全文翻译 ${i}` : '',
         summaryZh: withZh ? `这是第 ${i} 篇的中文摘要。` : '',
         publishedText: '',
       });
@@ -95,7 +97,7 @@ const smokeFile = {
   schemaVersion: 2, day: smokeDay, generatedAt: smokeIndex.generatedAt,
   x: [{
     id: 'v2-smoke', handle: 'smoke', builder: 'V2 Smoke', bio: '',
-    text: 'V2 browser smoke', textZh: 'V2 浏览器冒烟', createdAt: new Date().toISOString(),
+    text: 'V2 browser smoke', textZh: '不得显示的 V2 旧翻译', summaryZh: 'V2 真实总结', createdAt: new Date().toISOString(),
     url: 'https://x.com/smoke/status/v2-smoke', likes: 0, retweets: 0, replies: 0,
   }],
   podcasts: [], blogs: [],
@@ -153,24 +155,32 @@ async function main() {
     source: activeSource,
     posts: DB.posts.size,
     paths: window.__fetchPaths,
-    hasChinese: [...DB.posts.values()].some(item => item.textZh === 'V2 浏览器冒烟'),
+    hasSummary: [...DB.posts.values()].some(item => item.summaryZh === 'V2 真实总结'),
+    hasLegacyFields: [...DB.posts.values()].some(item => Object.keys(item).some(key => /^(text|title|content|transcript)Zh$/.test(key))),
+    hasLangButton: !!document.querySelector('#btn-lang'),
   })`);
   const results = [];
   const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
-  check('T0 空缓存首启：只请求 v2 index/day 并启用中文源', smoke && smoke.source === 'zh' && smoke.posts === 1 && smoke.hasChinese && smoke.paths.length === 2 && smoke.paths.some(url => url.includes('data/index.json')) && smoke.paths.some(url => url.includes(`data/days/${smokeDay}.json`)) && smoke.paths.every(url => !url.includes('feed-')), JSON.stringify(smoke));
+  check('T0 空缓存首启：读取 v2 总结且无语言按钮', smoke && smoke.source === 'zh' && smoke.posts === 1 && smoke.hasSummary && !smoke.hasLegacyFields && !smoke.hasLangButton && smoke.paths.length === 2 && smoke.paths.some(url => url.includes('data/index.json')) && smoke.paths.some(url => url.includes(`data/days/${smokeDay}.json`)) && smoke.paths.every(url => !url.includes('feed-')), JSON.stringify(smoke));
   // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
   const seeded = await evalJS(`(() => {
     localStorage.clear();
-    localStorage.setItem('fb.web.v5', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
-    localStorage.setItem('fb.web.v5.pref', JSON.stringify({ depth: 7 }));
+    localStorage.setItem('fb.web.v6', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
+    localStorage.setItem('fb.web.v6.pref', JSON.stringify({ depth: 7 }));
     return 'seeded';
   })()`);
   console.log('播种:', seeded);
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(2500);
 
+  let v = await evalJS(`({
+    memory: [...DB.posts.values(), ...DB.episodes.values(), ...DB.blogs.values()].some(item => Object.keys(item).some(key => /^(text|title|content|transcript)Zh$/.test(key))),
+    cache: JSON.parse(localStorage.getItem('fb.web.v6')).posts.concat(JSON.parse(localStorage.getItem('fb.web.v6')).episodes, JSON.parse(localStorage.getItem('fb.web.v6')).blogs).some(item => Object.keys(item).some(key => /^(text|title|content|transcript)Zh$/.test(key))),
+  })`);
+  check('T0b 旧翻译字段从内存和 v6 缓存中清除', v && !v.memory && !v.cache, JSON.stringify(v));
+
   // T1 单日视图 + 品牌
-  let v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
+  v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
   check('T1 单日视图：标题=造浪者，只渲染 1 天', v && v.t === '造浪者' && v.secs === 1, `secs=${v && v.secs}`);
   // T2 滑动窗口：种子 10 天 → 显式触发修剪 → 窗口外批次被清除（预期按产品公式计算）
   const allDays = [];
@@ -188,7 +198,7 @@ async function main() {
   v = await evalJS(`({t: document.querySelector('.day-section .d-title').textContent, next: !document.querySelector('#btn-next-day').classList.contains('hidden')})`);
   check('T4 下一天按钮：切到昨天且按钮仍在', v && v.t === '昨天' && v.next, `title=${v && v.t}`);
 
-  // T5 中文模式：每条 = 【AI 简述】+【原文】双段结构
+  // T5 每条 = 【真实 AI 简述】+【英文原文】双段结构，旧翻译永不展示
   await evalJS(`document.querySelectorAll('#day-chips .chip')[0].click();`);
   await wait(300);
   v = await evalJS(`(() => {
@@ -201,19 +211,10 @@ async function main() {
       briefCount: document.querySelectorAll('.zh-brief').length,
     };
   })()`);
-  check('T5 中文模式：简述块 + 原文段同卡展示', v && v.found && /AI 简述/.test(v.brief) && /中文推文·第0天·0/.test(v.brief) && /Day 0 tweet 0-0/.test(v.orig), JSON.stringify(v).slice(0, 160));
+  check('T5 真实总结 + 英文原文同卡展示', v && v.found && /AI 简述/.test(v.brief) && /真正总结·第0天·0/.test(v.brief) && !/不得显示/.test(v.brief) && /Day 0 tweet 0-0/.test(v.orig), JSON.stringify(v).slice(0, 160));
 
-  // T5b 顶栏全局切 EN：简述块消失，全部显示英文原文
-  await evalJS(`document.querySelector('#btn-lang').click();`);
-  await wait(300);
-  v = await evalJS(`({briefs: document.querySelectorAll('.zh-brief').length, first: document.querySelector('.tweet-card .tweet-text').textContent, lang: document.querySelector('#btn-lang').textContent})`);
-  check('T5b 全局切 EN：仅原文展示', v && v.briefs === 0 && /Day/.test(v.first) && v.lang === '中', JSON.stringify(v).slice(0, 120));
-
-  // T5b2 切回中文
-  await evalJS(`document.querySelector('#btn-lang').click();`);
-  await wait(300);
-  v = await evalJS(`({briefs: document.querySelectorAll('.zh-brief').length, lang: document.querySelector('#btn-lang').textContent})`);
-  check('T5b2 切回中文：简述块恢复', v && v.briefs >= 1 && v.lang === 'EN', `briefs=${v && v.briefs}`);
+  v = await evalJS(`document.querySelector('#btn-lang')`);
+  check('T5b 顶栏没有中英文切换按钮', v === null, String(v));
 
   // T6 筛选 X 推文（跨天全部）
   await evalJS(`document.querySelector('[data-filter=x]').click();`);
@@ -231,25 +232,25 @@ async function main() {
   check('T7 播客阅读器：中文要点 + 转录原文同页', v && /要点摘要/.test(v.sub) && /转录原文/.test(v.sub) && v.segs === 2, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
-  // T8 筛选博客：有译文的显示中文标题
+  // T8 筛选博客：始终显示英文标题
   await evalJS(`document.querySelector('[data-filter=blogs]').click();`);
   await wait(300);
   v = await evalJS(`[...document.querySelectorAll('.row-card.blog .r-title')].map(x => x.textContent).join('|')`);
-  check('T8 筛选博客：有译文的显示中文标题', /文章中文标题/.test(v || '') && /Post 4/.test(v || ''), v);
+  check('T8 筛选博客：始终显示英文标题', /Post 2/.test(v || '') && /Post 4/.test(v || '') && !/不得显示/.test(v || ''), v);
 
-  // T9 博客阅读器：默认中文译文（阅读器内也有切换小按钮）
-  await evalJS(`[...document.querySelectorAll('.row-card.blog')].find(r => r.textContent.includes('文章中文标题')).click();`);
+  // T9 博客阅读器：中文总结 + 英文原文，无翻译切换
+  await evalJS(`[...document.querySelectorAll('.row-card.blog')].find(r => r.textContent.includes('Post 2')).click();`);
   await wait(400);
   v = await evalJS(`(() => {
     const body = document.querySelector('#reader-body');
-    const zh = body.textContent.includes('中文全文翻译');
-    const toggle = body.querySelector('.lang-toggle');
-    toggle.click();
-    const en = body.textContent.includes('English body') && !body.textContent.includes('中文全文翻译');
-    toggle.click();
-    return { zh, en, backZh: body.textContent.includes('中文全文翻译') };
+    return {
+      summary: body.textContent.includes('这是第 2 篇的中文摘要'),
+      original: body.textContent.includes('English body of post 2'),
+      oldTranslation: body.textContent.includes('不得显示'),
+      toggle: !!body.querySelector('.lang-toggle'),
+    };
   })()`);
-  check('T9 博客阅读器：中文默认 + 阅读器内切换英文', v && v.zh === true && v.en === true && v.backZh === true, JSON.stringify(v));
+  check('T9 博客阅读器：总结 + 英文原文且无翻译切换', v && v.summary && v.original && !v.oldTranslation && !v.toggle, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
   // T10 返回时间线
@@ -260,18 +261,14 @@ async function main() {
   v = await evalJS(`document.querySelector('#app-title').textContent`);
   check('T10 返回时间线：标题恢复', v === '造浪者', v);
 
-  // T11 全局 EN 模式下播客阅读器：不显示中文要点摘要
-  await evalJS(`document.querySelector('#btn-lang').click();`); // → en
-  await wait(200);
+  // T11 播客标题保持英文，摘要与英文转录同时显示
   await evalJS(`document.querySelector('[data-filter=podcasts]').click();`);
   await wait(300);
   await evalJS(`document.querySelector('.row-card.podcast').click();`);
   await wait(400);
-  v = await evalJS(`({hasZhSummary: document.querySelector('#reader-body').textContent.includes('要点摘要'), enTitle: document.querySelector('#reader-title').textContent})`);
-  check('T11 EN 模式：播客阅读器仅原文转录', v && v.hasZhSummary === false && /Episode/.test(v.enTitle), JSON.stringify(v));
+  v = await evalJS(`({hasZhSummary: document.querySelector('#reader-body').textContent.includes('要点摘要'), hasTranscript: document.querySelector('#reader-body').textContent.includes('Hello world'), enTitle: document.querySelector('#reader-title').textContent})`);
+  check('T11 播客阅读器：中文总结 + 英文标题和转录', v && v.hasZhSummary && v.hasTranscript && /Episode/.test(v.enTitle), JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
-  await evalJS(`document.querySelector('#btn-lang').click();`); // → zh
-  await wait(200);
   await evalJS(`document.querySelector('[data-filter=x]').click();`);
   await wait(200);
   await evalJS(`document.querySelector('.btn-back').click();`);
