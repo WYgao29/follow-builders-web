@@ -8,6 +8,7 @@
   const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
   const KINDS = ['x', 'podcasts', 'blogs'];
   const ARCHIVE_VERSIONS = new Set([2, 3]);
+  const LEGACY_TRANSLATION_FIELDS = ['textZh', 'titleZh', 'contentZh', 'transcriptZh'];
   const UPSTREAM_PATHS = {
     x: 'feed-x.json',
     podcasts: 'feed-podcasts.json',
@@ -27,6 +28,12 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function stripLegacyTranslations(item) {
+    const clean = { ...(item || {}) };
+    for (const field of LEGACY_TRANSLATION_FIELDS) delete clean[field];
+    return clean;
   }
 
   function mirrorKey(repo, kind) {
@@ -79,8 +86,11 @@
     return index;
   }
 
-  function validateDayFile(file, entry, schemaVersion = file && file.schemaVersion) {
-    if (!file || file.schemaVersion !== schemaVersion || file.day !== entry.day) {
+  function validateDayFile(file, entry, schemaVersion = null) {
+    if (!file || !ARCHIVE_VERSIONS.has(file.schemaVersion)) {
+      throw new Error(`${entry.day} 日分片不是有效的 v2 或 v3 数据`);
+    }
+    if ((schemaVersion !== null && file.schemaVersion !== schemaVersion) || file.day !== entry.day) {
       throw new Error(`${entry.day} 日分片版本不一致`);
     }
     for (const kind of KINDS) {
@@ -150,6 +160,7 @@
     KINDS,
     UPSTREAM_PATHS,
     safeURL,
+    stripLegacyTranslations,
     mirrorKey,
     buildSourceURL,
     mergeRichItem,

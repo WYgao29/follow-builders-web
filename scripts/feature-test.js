@@ -156,11 +156,12 @@ async function main() {
     posts: DB.posts.size,
     paths: window.__fetchPaths,
     hasSummary: [...DB.posts.values()].some(item => item.summaryZh === 'V2 真实总结'),
+    hasLegacyFields: [...DB.posts.values()].some(item => Object.keys(item).some(key => /^(text|title|content|transcript)Zh$/.test(key))),
     hasLangButton: !!document.querySelector('#btn-lang'),
   })`);
   const results = [];
   const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
-  check('T0 空缓存首启：读取 v2 总结且无语言按钮', smoke && smoke.source === 'zh' && smoke.posts === 1 && smoke.hasSummary && !smoke.hasLangButton && smoke.paths.length === 2 && smoke.paths.some(url => url.includes('data/index.json')) && smoke.paths.some(url => url.includes(`data/days/${smokeDay}.json`)) && smoke.paths.every(url => !url.includes('feed-')), JSON.stringify(smoke));
+  check('T0 空缓存首启：读取 v2 总结且无语言按钮', smoke && smoke.source === 'zh' && smoke.posts === 1 && smoke.hasSummary && !smoke.hasLegacyFields && !smoke.hasLangButton && smoke.paths.length === 2 && smoke.paths.some(url => url.includes('data/index.json')) && smoke.paths.some(url => url.includes(`data/days/${smokeDay}.json`)) && smoke.paths.every(url => !url.includes('feed-')), JSON.stringify(smoke));
   // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
   const seeded = await evalJS(`(() => {
     localStorage.clear();
@@ -172,8 +173,14 @@ async function main() {
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(2500);
 
+  let v = await evalJS(`({
+    memory: [...DB.posts.values(), ...DB.episodes.values(), ...DB.blogs.values()].some(item => Object.keys(item).some(key => /^(text|title|content|transcript)Zh$/.test(key))),
+    cache: JSON.parse(localStorage.getItem('fb.web.v6')).posts.concat(JSON.parse(localStorage.getItem('fb.web.v6')).episodes, JSON.parse(localStorage.getItem('fb.web.v6')).blogs).some(item => Object.keys(item).some(key => /^(text|title|content|transcript)Zh$/.test(key))),
+  })`);
+  check('T0b 旧翻译字段从内存和 v6 缓存中清除', v && !v.memory && !v.cache, JSON.stringify(v));
+
   // T1 单日视图 + 品牌
-  let v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
+  v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
   check('T1 单日视图：标题=造浪者，只渲染 1 天', v && v.t === '造浪者' && v.secs === 1, `secs=${v && v.secs}`);
   // T2 滑动窗口：种子 10 天 → 显式触发修剪 → 窗口外批次被清除（预期按产品公式计算）
   const allDays = [];

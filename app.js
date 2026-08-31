@@ -143,12 +143,22 @@ const DB = {
   builderName: new Map(), // handle -> {name, bio}
 
   hydrate() {
-    for (const p of Store.data.posts) this.posts.set(p.id, p);
-    for (const e of Store.data.episodes) this.episodes.set(e.guid, e);
-    for (const b of Store.data.blogs) this.blogs.set(b.url, b);
     for (const p of Store.data.posts) {
+      const clean = Core.stripLegacyTranslations(p);
+      this.posts.set(clean.id, clean);
+    }
+    for (const e of Store.data.episodes) {
+      const clean = Core.stripLegacyTranslations(e);
+      this.episodes.set(clean.guid, clean);
+    }
+    for (const b of Store.data.blogs) {
+      const clean = Core.stripLegacyTranslations(b);
+      this.blogs.set(clean.url, clean);
+    }
+    for (const p of this.posts.values()) {
       this.builderName.set(p.handle, { name: p.builder, bio: p.bio || '' });
     }
+    this.persist();
   },
 
   persist() {
@@ -236,7 +246,7 @@ const DB = {
       const ms = parseDate(item.createdAt);
       if (ms == null) continue;
       const normalized = {
-        ...item,
+        ...Core.stripLegacyTranslations(item),
         text: decodeEntities(item.text || ''), summaryZh: decodeEntities(item.summaryZh || ''),
         builder: decodeEntities(item.builder || item.handle), bio: decodeEntities(item.bio || ''),
         ms, batchDay: file.day,
@@ -249,7 +259,7 @@ const DB = {
     for (const item of file.podcasts) {
       const ms = parseDate(item.publishedAt) ?? parseDate(file.generatedAt) ?? Date.now();
       const normalized = {
-        ...item,
+        ...Core.stripLegacyTranslations(item),
         show: decodeEntities(item.name || '未知节目'), title: decodeEntities(item.title || '未命名单集'),
         summaryZh: decodeEntities(item.summaryZh || ''),
         transcript: decodeEntities(item.transcript || ''), ms, batchDay: file.day,
@@ -261,7 +271,7 @@ const DB = {
     for (const item of file.blogs) {
       const ms = parseDate(item.publishedAt) ?? parseDate(file.generatedAt) ?? Date.now();
       const normalized = {
-        ...item,
+        ...Core.stripLegacyTranslations(item),
         source: decodeEntities(item.name || '未知来源'), title: decodeEntities((item.title || '未命名文章').trim()),
         author: decodeEntities(item.author || ''),
         summary: decodeEntities(item.description || ''), content: decodeEntities(item.content || ''),
@@ -1197,7 +1207,7 @@ function bind() {
     for (const x of document.querySelectorAll('#depth-seg button'))
       x.classList.toggle('active', x === b);
     updateBackfillButton();
-    // 深度调大 → 重新读取更多 v2 日分片；加载进行中则排队。
+    // 深度调大 → 重新读取更多 v2/v3 日分片；加载进行中则排队。
     if (Number(b.dataset.depth) > prev) {
       if (!syncBusy) refreshCurrent();
       else pendingBackfill = true;
