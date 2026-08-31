@@ -14,7 +14,7 @@
 
 <header class="topbar">
   <div class="topbar-row">
-    <button id="btn-menu" class="icon-btn" title="菜单" aria-label="菜单">
+    <button id="btn-menu" class="icon-btn" title="菜单" aria-label="菜单" aria-expanded="false">
       <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
     </button>
     <h1 id="app-title">造浪者</h1>
@@ -23,7 +23,7 @@
       <button id="btn-refresh" class="icon-btn" title="刷新" aria-label="刷新">
         <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
       </button>
-      <button id="btn-settings" class="icon-btn" title="设置" aria-label="设置">
+      <button id="btn-settings" class="icon-btn" title="设置" aria-label="设置" aria-expanded="false">
         <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88L2.82 14.16a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.34.68.22l2.39-.96c.5.39 1.05.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.13-.55 1.63-.94l2.39.96c.26.12.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
       </button>
     </div>
@@ -107,13 +107,13 @@
     </div>
 
     <div class="sheet-section">
-      <h3>历史回填深度</h3>
+      <h3>加载范围</h3>
       <div class="seg" id="depth-seg">
         <button data-depth="7" class="active">7 天</button>
         <button data-depth="14">14 天</button>
         <button data-depth="30">30 天</button>
       </div>
-      <p class="hint">回填会从 GitHub 每日快照恢复更早的内容；已下载的天数不会重复下载。调大深度后会自动补拉新增区间，无需手动刷新。</p>
+      <p class="hint">从中文数据集加载最近 7、14 或 30 个日分片；调大深度后会自动补拉新增区间。</p>
     </div>
 
     <div class="sheet-section">
@@ -127,6 +127,7 @@
   </div>
 </div>
 
+<script src="data-core.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

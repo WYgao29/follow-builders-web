@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /* 功能点逐项测试（离线确定性）：
- * 用含中文字段的合成数据播种 localStorage + mock digest 接口 → 断言 → PASS/FAIL
+ * 用含中文字段的合成数据播种 localStorage → 断言 → PASS/FAIL
  * 用法: node scripts/feature-test.js [baseURL]
  */
 'use strict';
 const { execFile } = require('child_process');
+const fs = require('fs');
 const http = require('http');
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME_BIN || [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+].find(candidate => fs.existsSync(candidate));
 const CDP_PORT = 9225;
 const BASE = process.argv[2] || 'http://127.0.0.1:8931';
 
@@ -22,17 +27,11 @@ function getJSON(path) {
 }
 
 /* 生成 10 天合成数据：3 位构建者 × 每天 2 条推文（一条带中文译文）+ 播客 + 博客 */
-/* 与产品一致的批次窗口计算：expected 批次日 往前推 depth-1 天为截止线 */
+/* v2 窗口按 index 从新到旧精确选取 depth 个日分片。 */
 function windowKept(allDays, depth) {
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
-  const now = new Date();
-  const snap = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 28, 0, 0));
-  const ref = now >= snap ? snap : new Date(snap.getTime() - 86400000);
-  const expected = dayKey(ref.getTime());
-  const [y, m, d0] = expected.split('-').map(Number);
-  const cutoff = dayKey(new Date(y, m - 1, d0, 12).getTime() - (depth - 1) * 86400000);
-  const kept = allDays.filter(d => d >= cutoff).length;
+  const selected = [...allDays].sort().reverse().slice(0, depth);
+  const kept = selected.length;
+  const cutoff = selected[selected.length - 1];
   return { kept, cutoff };
 }
 
@@ -87,17 +86,39 @@ function seedData() {
 }
 
 const seed = seedData();
-const seedJSON = JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() });
-const SEED_SCRIPT = `
-  const realFetch = window.fetch;
-  window.__digestHits = 0;
-  window.fetch = (u, o) => String(u).includes('/digest/')
-    ? (window.__digestHits++, Promise.resolve(new Response(JSON.stringify({ day: 'x', markdown: '## 今日焦点\\n\\n这是 **模拟日报** 内容。' }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
-    : realFetch(u, o);
+const smokeDay = seed.posts[0].batchDay;
+const smokeIndex = {
+  schemaVersion: 2, generatedAt: new Date().toISOString(),
+  days: [{ day: smokeDay, path: `data/days/${smokeDay}.json`, counts: { x: 1, podcasts: 0, blogs: 0 } }],
+};
+const smokeFile = {
+  schemaVersion: 2, day: smokeDay, generatedAt: smokeIndex.generatedAt,
+  x: [{
+    id: 'v2-smoke', handle: 'smoke', builder: 'V2 Smoke', bio: '',
+    text: 'V2 browser smoke', textZh: 'V2 浏览器冒烟', createdAt: new Date().toISOString(),
+    url: 'https://x.com/smoke/status/v2-smoke', likes: 0, retweets: 0, replies: 0,
+  }],
+  podcasts: [], blogs: [],
+};
+const V2_SMOKE_SCRIPT = `
+  window.__allowDataFetch = true;
+  window.__fetchPaths = [];
+  const smokePayloads = ${JSON.stringify({ 'data/index.json': smokeIndex, [`data/days/${smokeDay}.json`]: smokeFile })};
+  window.fetch = (input) => {
+    const url = String(input);
+    window.__fetchPaths.push(url);
+    if (!window.__allowDataFetch) return Promise.reject(new Error('offline test mode'));
+    const path = Object.keys(smokePayloads).find(candidate => url.includes(candidate));
+    if (!path || !url.includes('WYgao29/zaolangzhe-data')) return Promise.reject(new Error('unexpected request: ' + url));
+    return Promise.resolve(new Response(JSON.stringify(smokePayloads[path]), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+  };
 `;
 
 let mainChrome = null;
 async function main() {
+  if (!CHROME) throw new Error('未找到 Chrome/Chromium；可通过 CHROME_BIN 指定');
   const profile = '/tmp/fb-feature-profile-' + Date.now();
   const chrome = mainChrome = execFile(CHROME, [
     '--headless=new', '--disable-gpu', '--no-first-run',
@@ -125,22 +146,28 @@ async function main() {
   };
 
   await send('Page.enable');
-  await send('Page.addScriptToEvaluateOnNewDocument', { source: SEED_SCRIPT });
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: V2_SMOKE_SCRIPT });
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(1500);
+  const smoke = await evalJS(`({
+    source: activeSource,
+    posts: DB.posts.size,
+    paths: window.__fetchPaths,
+    hasChinese: [...DB.posts.values()].some(item => item.textZh === 'V2 浏览器冒烟'),
+  })`);
+  const results = [];
+  const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
+  check('T0 空缓存首启：只请求 v2 index/day 并启用中文源', smoke && smoke.source === 'zh' && smoke.posts === 1 && smoke.hasChinese && smoke.paths.length === 2 && smoke.paths.some(url => url.includes('data/index.json')) && smoke.paths.some(url => url.includes(`data/days/${smokeDay}.json`)) && smoke.paths.every(url => !url.includes('feed-')), JSON.stringify(smoke));
   // 确定性播种：加载后写入 localStorage（此时页面已就绪，无竞态），再重载生效
   const seeded = await evalJS(`(() => {
     localStorage.clear();
-    localStorage.setItem('fb.web.v4', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
-    localStorage.setItem('fb.web.v4.pref', JSON.stringify({ depth: 7 }));
+    localStorage.setItem('fb.web.v5', ${JSON.stringify(JSON.stringify({ posts: seed.posts, episodes: seed.episodes, blogs: seed.blogs, doneShas: [], lastRefresh: Date.now() }))});
+    localStorage.setItem('fb.web.v5.pref', JSON.stringify({ depth: 7 }));
     return 'seeded';
   })()`);
   console.log('播种:', seeded);
   await send('Page.navigate', { url: BASE + '/index.html' });
   await wait(2500);
-
-  const results = [];
-  const check = (name, pass, detail = '') => { results.push([name, !!pass, detail]); console.log(`${pass ? '✅ PASS' : '❌ FAIL'}  ${name}${detail ? '  [' + detail + ']' : ''}`); };
 
   // T1 单日视图 + 品牌
   let v = await evalJS(`({t: document.querySelector('#app-title').textContent, secs: document.querySelectorAll('.day-section').length})`);
@@ -254,6 +281,7 @@ async function main() {
   check('T12 无客户端 AI 调用残留', v && v.callAI === false && v.AI_CONFIG === false && v.genBtn === false, JSON.stringify(v));
 
   // T12b 清空缓存：确认数据立即清空（离线不验证后续自动重载，那需要网络）
+  await evalJS(`window.__allowDataFetch = false;`);
   await evalJS(`window.confirm = () => true;`);
   await evalJS(`document.querySelector('#btn-settings').click();`);
   await wait(300);
@@ -262,14 +290,21 @@ async function main() {
   v = await evalJS(`({posts: DB.posts.size, days: dayKeysCache.length, emptyVisible: !document.querySelector('#empty-state').classList.contains('hidden')})`);
   check('T12b 清空缓存：数据立即清空', v && v.posts === 0 && v.days === 0, JSON.stringify(v));
 
-  // T13 Esc 关闭抽屉（先确认已打开，避免"从未打开→恒隐藏"的假通过）
+  // T13 弹层接管焦点，Esc 关闭后把焦点还给触发按钮。
+  await evalJS(`document.querySelector('#btn-menu').focus();`);
   await evalJS(`document.querySelector('#btn-menu').click();`);
   await wait(300);
-  const opened = await evalJS(`!document.querySelector('#drawer-mask').classList.contains('hidden')`);
+  const opened = await evalJS(`({visible: !document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id, expanded: document.querySelector('#btn-menu').getAttribute('aria-expanded')})`);
+  v = await evalJS(`(() => {
+    document.querySelector('#nav-settings').focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    return document.activeElement.id;
+  })()`);
+  check('T13 侧边栏焦点接管并在末端循环', opened && opened.visible && opened.focus === 'nav-home' && opened.expanded === 'true' && v === 'nav-home', JSON.stringify({ opened, wrapped: v }));
   await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`);
   await wait(300);
-  const closed = await evalJS(`document.querySelector('#drawer-mask').classList.contains('hidden')`);
-  check('T13 Esc 关闭侧边栏', opened === true && closed === true, `打开=${opened}, 关闭=${closed}`);
+  const closed = await evalJS(`({hidden: document.querySelector('#drawer-mask').classList.contains('hidden'), focus: document.activeElement.id, expanded: document.querySelector('#btn-menu').getAttribute('aria-expanded')})`);
+  check('T14 Esc 关闭侧边栏并恢复焦点', closed && closed.hidden && closed.focus === 'btn-menu' && closed.expanded === 'false', JSON.stringify(closed));
 
   const failed = results.filter(r => !r[1]).length;
   console.log(`\n===== 汇总：${results.length - failed}/${results.length} 通过 =====`);

@@ -1,17 +1,15 @@
 /* Follow Builders Web — 数据与交互逻辑
- * 数据流与 iOS 版一致：GitHub 上的三个公开 feed JSON → 去重合并 → 按本地日历日分组。
+ * 主数据源：zaolangzhe-data v2 日分片；整体失败时降级到上游完整快照。
  * 镜像策略：GitHub 直连优先，失败自动切 jsDelivr（可手动锁定）。
  */
 'use strict';
 
+const Core = globalThis.FBDataCore;
+if (!Core) throw new Error('data-core.js 未加载');
 const UPSTREAM_REPO = 'zarazhangrui/follow-builders'; // 上游原始数据（兜底）
 const ZH_REPO = 'WYgao29/zaolangzhe-data';            // 中文归档数据集（优先）
-const DATA_SOURCES = [
-  { id: 'zh', repo: ZH_REPO },
-  { id: 'upstream', repo: UPSTREAM_REPO },
-];
 const REF_MAIN = 'main';
-const PATHS = { x: 'feed-x.json', podcasts: 'feed-podcasts.json', blogs: 'feed-blogs.json' };
+const PATHS = Core.UPSTREAM_PATHS;
 const API_COMMITS = 'https://api.github.com/repos/' + UPSTREAM_REPO + '/commits'; // 回填历史永远走上游
 const REFRESH_MIN_INTERVAL = 3600 * 1000;
 const BACKFILL_CONCURRENCY = 3;
@@ -65,17 +63,49 @@ function countFmt(n) {
 /* 链接白名单：feed 内容是第三方数据，只放行 http(s)，
  * 杜绝 javascript: 等伪协议注入 */
 function safeURL(u) {
-  if (typeof u !== 'string' || !u.trim()) return null;
-  try {
-    const url = new URL(u, location.href);
-    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
-  } catch (e) { /* 非法链接按无链接处理 */ }
+  return Core.safeURL(u);
+}
+
+const modalReturnFocus = new WeakMap();
+
+function showDialog(container, focusTarget) {
+  if (container.classList.contains('hidden')) modalReturnFocus.set(container, document.activeElement);
+  container.classList.remove('hidden');
+  requestAnimationFrame(() => focusTarget.focus());
+}
+
+function hideDialog(container) {
+  container.classList.add('hidden');
+  const previous = modalReturnFocus.get(container);
+  modalReturnFocus.delete(container);
+  if (previous && previous.isConnected) previous.focus();
+}
+
+function activeDialog() {
+  if (!$('#reader').classList.contains('hidden')) return $('#reader');
+  if (!$('#settings-mask').classList.contains('hidden')) return $('#settings-mask').querySelector('[role="dialog"]');
+  if (!$('#drawer-mask').classList.contains('hidden')) return $('#drawer-mask').querySelector('[role="dialog"]');
   return null;
+}
+
+function trapDialogFocus(event) {
+  const dialog = activeDialog();
+  if (!dialog || event.key !== 'Tab') return;
+  const nodes = [...dialog.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(node => !node.classList.contains('hidden'));
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault(); last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault(); first.focus();
+  }
 }
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v4', // v4：数据源切换为中文归档仓库（digest 预生成，不再本地 AI 生成）
+  KEY: 'fb.web.v5', // v5：只接受中文数据仓 v2 日分片契约
   data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
@@ -201,6 +231,51 @@ const DB = {
     }
     return added;
   },
+
+  mergeDay(file) {
+    let added = 0;
+    for (const item of file.x) {
+      const ms = parseDate(item.createdAt);
+      if (ms == null) continue;
+      const normalized = {
+        ...item,
+        text: decodeEntities(item.text || ''), textZh: decodeEntities(item.textZh || ''),
+        builder: decodeEntities(item.builder || item.handle), bio: decodeEntities(item.bio || ''),
+        ms, batchDay: file.day,
+      };
+      const existing = this.posts.get(item.id);
+      this.posts.set(item.id, existing ? Core.mergeRichItem('x', existing, normalized) : normalized);
+      this.builderName.set(item.handle, { name: normalized.builder, bio: normalized.bio });
+      if (!existing) added++;
+    }
+    for (const item of file.podcasts) {
+      const ms = parseDate(item.publishedAt) ?? parseDate(file.generatedAt) ?? Date.now();
+      const normalized = {
+        ...item,
+        show: decodeEntities(item.name || '未知节目'), title: decodeEntities(item.title || '未命名单集'),
+        titleZh: decodeEntities(item.titleZh || ''), summaryZh: decodeEntities(item.summaryZh || ''),
+        transcript: decodeEntities(item.transcript || ''), ms, batchDay: file.day,
+      };
+      const existing = this.episodes.get(item.guid);
+      this.episodes.set(item.guid, existing ? Core.mergeRichItem('podcasts', existing, normalized) : normalized);
+      if (!existing) added++;
+    }
+    for (const item of file.blogs) {
+      const ms = parseDate(item.publishedAt) ?? parseDate(file.generatedAt) ?? Date.now();
+      const normalized = {
+        ...item,
+        source: decodeEntities(item.name || '未知来源'), title: decodeEntities((item.title || '未命名文章').trim()),
+        titleZh: decodeEntities(item.titleZh || ''), author: decodeEntities(item.author || ''),
+        summary: decodeEntities(item.description || ''), content: decodeEntities(item.content || ''),
+        contentZh: decodeEntities(item.contentZh || ''), summaryZh: decodeEntities(item.summaryZh || ''),
+        publishedText: item.publishedAt || '', ms, batchDay: file.day,
+      };
+      const existing = this.blogs.get(item.url);
+      this.blogs.set(item.url, existing ? Core.mergeRichItem('blogs', existing, normalized) : normalized);
+      if (!existing) added++;
+    }
+    return added;
+  },
 };
 
 /* ---------- 日期解析（多格式容错，与 iOS 版对齐） ---------- */
@@ -236,20 +311,20 @@ function parseDate(raw) {
 const Mirrors = {
   order: ['github', 'jsdelivr'],
   url(kind, repo, ref, path) {
-    if (kind === 'github') return `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
-    return `https://cdn.jsdelivr.net/gh/${repo}@${ref}/${path}`;
+    return Core.buildSourceURL(kind, repo, ref, path);
   },
   label(kind) { return kind === 'github' ? 'GitHub 直连' : 'jsDelivr'; },
 
   async fetchJSON(path, ref, repo) {
     const pref = Store.pref.mirror || 'auto';
     const now = Date.now();
+    const active = this.active[repo];
     let cand = pref === 'auto'
-      ? (this.active ? [this.active, ...this.order.filter(k => k !== this.active)] : [...this.order])
+      ? (active ? [active, ...this.order.filter(k => k !== active)] : [...this.order])
       : [pref];
     if (pref === 'auto') {
       // 冷却中的线路排到队尾（失败过一次 5 分钟内不再优先尝试）
-      cand.sort((a, b) => ((this.coolUntil[a] || 0) < now ? 0 : 1) - ((this.coolUntil[b] || 0) < now ? 0 : 1));
+      cand.sort((a, b) => ((this.coolUntil[Core.mirrorKey(repo, a)] || 0) < now ? 0 : 1) - ((this.coolUntil[Core.mirrorKey(repo, b)] || 0) < now ? 0 : 1));
     }
     let lastErr;
     for (const kind of cand) {
@@ -266,13 +341,13 @@ const Mirrors = {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const json = await res.json();
         if (pref === 'auto') {
-          this.active = kind;
-          delete this.coolUntil[kind];
+          this.active[repo] = kind;
+          delete this.coolUntil[Core.mirrorKey(repo, kind)];
         }
         updateMirrorStatus(`当前走「${this.label(kind)}」`);
         return json;
       } catch (e) {
-        lastErr = e;
+        lastErr = new Error(`${repo}/${path} @ ${kind}: ${e && e.message ? e.message : '网络失败'}`);
         if (pref === 'auto') this.coolUntil[repo + '|' + kind] = Date.now() + 5 * 60 * 1000;
       }
     }
@@ -280,7 +355,7 @@ const Mirrors = {
     throw lastErr || new Error('网络失败');
   },
 };
-Mirrors.active = null;
+Mirrors.active = {};
 Mirrors.coolUntil = {};
 
 /* ---------- 转录解析（与 iOS 版同一规则） ---------- */
@@ -351,6 +426,7 @@ let dayKeysCache = [];      // 最近一次渲染的全部日键（新→旧）
 let contentFilter = null;   // null | 'x' | 'podcasts' | 'blogs'（分类筛选视图）
 let pendingBackfill = false; // 回填进行中又调大了深度 → 完成后自动续跑
 let activeSource = 'zh';     // 当前数据来源（zh=中文归档仓库 / upstream=上游兜底）
+let loadWarning = null;      // 非致命分片失败或已启用上游兜底时给用户明确提示
 let langMode = Store.pref.lang || 'zh'; // 全局原文语言：zh=中文优先 / en=英文原文
 let currentReaderReopen = null;         // 阅读器打开时的重绘句柄（切换语言用）
 
@@ -505,7 +581,9 @@ function keyToMs(key) {
 function pruneOldDays() {
   if (!DB.posts.size && !DB.episodes.size && !DB.blogs.size) return;
   const depth = Store.pref.depth || 7;
-  const cutoffKey = dayKey(keyToMs(expectedBatchDayLocal()) - (depth - 1) * 86400000);
+  const newest = newestLoadedBatchDay();
+  if (!newest) return;
+  const cutoffKey = dayKey(keyToMs(newest) - (depth - 1) * 86400000);
   let removed = false;
   const drop = (map) => {
     for (const [k, it] of [...map]) {
@@ -545,13 +623,8 @@ function newestLoadedBatchDay() {
 let lastBatchCheck = 0;
 async function ensureFreshBatch() {
   if (!DB.posts.size || syncBusy) return;
-  const expected = expectedBatchDayLocal();
-  const have = newestLoadedBatchDay();
-  const due = have === null || have < expected;                       // 该有新批次了
-  const stale = Date.now() - (Store.data.lastRefresh || 0) > REFRESH_MIN_INTERVAL; // 兜底：超 1 小时
-  if (!due && !stale) return;
-  // 设备时钟偏差可能导致"以为有新批次"反复空拉：批次检查 10 分钟内最多尝试一次
-  if (due && !stale && Date.now() - lastBatchCheck < 10 * 60 * 1000) return;
+  const stale = Date.now() - (Store.data.lastRefresh || 0) > REFRESH_MIN_INTERVAL;
+  if (!stale || Date.now() - lastBatchCheck < 10 * 60 * 1000) return;
   lastBatchCheck = Date.now();
   await refreshCurrent({ silent: true });
 }
@@ -780,22 +853,26 @@ function xLogo() {
 function openReader({ kicker, title, url, linkTitle, build }) {
   $('#reader-title').textContent = title;
   const link = $('#reader-link');
-  if (url) {
-    link.href = url;
+  const href = safeURL(url);
+  if (href) {
+    link.href = href;
     link.title = linkTitle || '打开原文';
     link.classList.remove('hidden');
-  } else link.classList.add('hidden');
+  } else {
+    link.removeAttribute('href');
+    link.classList.add('hidden');
+  }
   const body = $('#reader-body');
   body.textContent = '';
   body.scrollTop = 0;
   if (kicker) body.appendChild(el('p', 'rb-kicker', kicker));
   body.appendChild(el('div', 'rb-title', title));
   build(body);
-  $('#reader').classList.remove('hidden');
+  showDialog($('#reader'), $('#reader-close'));
   document.body.style.overflow = 'hidden';
 }
 function closeReader() {
-  $('#reader').classList.add('hidden');
+  hideDialog($('#reader'));
   document.body.style.overflow = '';
 }
 
@@ -827,33 +904,47 @@ function openBlogReader(b) {
       body.insertBefore(t, body.children[2] || null);
     }
   };
-  $('#reader-link').classList.toggle('hidden', !b.url);
-  if (b.url) { $('#reader-link').href = safeURL(b.url) || ''; $('#reader-link').title = '访问原文'; }
+  const href = safeURL(b.url);
+  $('#reader-link').classList.toggle('hidden', !href);
+  if (href) { $('#reader-link').href = href; $('#reader-link').title = '访问原文'; }
+  else $('#reader-link').removeAttribute('href');
   currentReaderReopen = () => openBlogReader(b);
   paint();
-  $('#reader').classList.remove('hidden');
+  showDialog($('#reader'), $('#reader-close'));
   document.body.style.overflow = 'hidden';
 }
 
 /* ---------- 拉取与合并 ---------- */
 async function fetchAllFeeds(fallbackMs) {
-  // 优先中文归档仓库（全量归档，一次到位）；整体失败降级到上游当前快照
-  for (const src of DATA_SOURCES) {
-    const [x, podcasts, blogs] = await Promise.all([
-      Mirrors.fetchJSON(PATHS.x, 'main', src.repo).catch(() => null),
-      Mirrors.fetchJSON(PATHS.podcasts, 'main', src.repo).catch(() => null),
-      Mirrors.fetchJSON(PATHS.blogs, 'main', src.repo).catch(() => null),
-    ]);
-    if (!x && !podcasts && !blogs) continue;
+  const fetchJSON = (path, ref, repo) => Mirrors.fetchJSON(path, ref, repo);
+  loadWarning = null;
+  let primaryError;
+  try {
+    const archive = await Core.loadChineseDays({
+      fetchJSON, repo: ZH_REPO, ref: REF_MAIN, depth: Store.pref.depth || 7,
+    });
     let added = 0;
-    if (x) added += DB.mergeX(x, fallbackMs);
-    if (podcasts) added += DB.mergePodcasts(podcasts, fallbackMs);
-    if (blogs) added += DB.mergeBlogs(blogs, fallbackMs);
-    activeSource = src.id;
+    for (const file of archive.days) added += DB.mergeDay(file);
+    if (archive.failures.length) {
+      loadWarning = `已加载最新内容；${archive.failures.length} 个较早日期暂时加载失败`;
+    }
+    activeSource = 'zh';
     return added;
+  } catch (error) {
+    primaryError = error;
   }
-  activeSource = 'none';
-  return 0;
+  try {
+    const feeds = await Core.loadUpstreamSnapshot({ fetchJSON, repo: UPSTREAM_REPO, ref: REF_MAIN });
+    const added = DB.mergeX(feeds.x, fallbackMs)
+      + DB.mergePodcasts(feeds.podcasts, fallbackMs)
+      + DB.mergeBlogs(feeds.blogs, fallbackMs);
+    loadWarning = '中文归档暂不可用，已显示上游英文完整快照';
+    activeSource = 'upstream';
+    return added;
+  } catch (fallbackError) {
+    activeSource = 'none';
+    throw new Error(`中文归档不可用（${primaryError.message}）；上游兜底不可用（${fallbackError.message}）`);
+  }
 }
 
 async function refreshCurrent({ silent } = {}) {
@@ -869,7 +960,9 @@ async function refreshCurrent({ silent } = {}) {
     DB.persist();
     render();
     const afterNewest = newestLoadedBatchDay();
-    if (afterNewest && afterNewest !== beforeNewest) {
+    if (loadWarning) {
+      showTransientNote(loadWarning);
+    } else if (afterNewest && afterNewest !== beforeNewest) {
       showTransientNote(`已更新「${dayTitle(afterNewest)}」的内容`);
     } else if (!silent || added) {
       setSync(null);
@@ -889,6 +982,10 @@ async function refreshCurrent({ silent } = {}) {
   } finally {
     syncBusy = false;
     $('#btn-refresh').disabled = false;
+    if (pendingBackfill) {
+      pendingBackfill = false;
+      setTimeout(() => refreshCurrent({ silent: true }), 0);
+    }
   }
 }
 
@@ -963,34 +1060,36 @@ async function backfill() {
     ].filter(j => !doneMap.has(j.kind + ':' + j.sha));
 
     const total = jobs.length;
-    let done = 0;
+    const progress = { attempted: 0, succeeded: 0, failed: 0 };
     setSync(total ? `正在回填历史 0/${total}` : null);
     let oldestJobMs = Infinity;
     for (let i = 0; i < jobs.length; i += BACKFILL_CONCURRENCY) {
       const chunk = jobs.slice(i, i + BACKFILL_CONCURRENCY);
       const results = await Promise.all(chunk.map(async (job) => {
         try {
-          const feed = await Mirrors.fetchJSON(PATHS[job.kind], job.sha);
+          const feed = await Mirrors.fetchJSON(PATHS[job.kind], job.sha, UPSTREAM_REPO);
           return { job, feed };
         } catch (e) { return null; } // 单个快照失败跳过
       }));
       for (const r of results) {
-        if (!r) continue;
+        progress.attempted++;
+        if (!r) { progress.failed++; continue; }
+        progress.succeeded++;
         if (r.job.kind === 'x') DB.mergeX(r.feed, r.job.ms);
         else if (r.job.kind === 'podcasts') DB.mergePodcasts(r.feed, r.job.ms);
         else DB.mergeBlogs(r.feed, r.job.ms);
         doneMap.set(r.job.kind + ':' + r.job.sha, r.job.kind + ':' + r.job.sha + ':' + dayKey(r.job.ms));
         oldestJobMs = Math.min(oldestJobMs, r.job.ms);
       }
-      done += chunk.length;
-      setSync(`正在回填历史 ${Math.min(done, total)}/${total}`);
-      prog.textContent = `已回填 ${done}/${total} 份历史快照`;
+      setSync(`正在回填历史 ${progress.attempted}/${total} · 成功 ${progress.succeeded} · 失败 ${progress.failed}`);
+      prog.textContent = `已成功回填 ${progress.succeeded}/${total} 份，失败 ${progress.failed} 份`;
       prog.classList.remove('hidden');
       Store.data.doneShas = [...doneMap.values()]; // 中断也不丢已完成进度
       DB.persist();
       // 注意：循环内不做全量渲染，避免用户阅读时页面反复跳动；结束后统一渲染
     }
 
+    if (jobs.length && progress.succeeded === 0) throw new Error(`历史快照全部加载失败（尝试 ${progress.attempted} 份）`);
     Store.data.doneShas = [...doneMap.values()];
     if (Number.isFinite(oldestJobMs)) {
       Store.data.oldestDay = Math.min(Store.data.oldestDay || Infinity, oldestJobMs);
@@ -999,7 +1098,10 @@ async function backfill() {
     pruneOldDays(); // 滑动窗口修剪
     DB.persist();
     setSync(null);
-    prog.classList.add('hidden');
+    if (progress.failed) {
+      prog.textContent = `回填完成：成功 ${progress.succeeded} 份，失败 ${progress.failed} 份（稍后可重试）`;
+      prog.classList.remove('hidden');
+    } else prog.classList.add('hidden');
     render();
   } catch (e) {
     setSync(null);
@@ -1012,7 +1114,8 @@ async function backfill() {
     // 回填期间又调大了深度 → 自动续跑补齐新区间（一次）
     if (pendingBackfill) {
       pendingBackfill = false;
-      backfill();
+      if (activeSource === 'upstream') backfill();
+      else refreshCurrent({ silent: true });
     }
   }
 }
@@ -1030,12 +1133,19 @@ function updateBackfillButton() {
 }
 
 /* ---------- 侧边栏抽屉 ---------- */
-function openDrawer() { $('#drawer-mask').classList.remove('hidden'); }
-function closeDrawer() { $('#drawer-mask').classList.add('hidden'); }
+function openDrawer() {
+  $('#btn-menu').setAttribute('aria-expanded', 'true');
+  showDialog($('#drawer-mask'), $('#nav-home'));
+}
+function closeDrawer() {
+  $('#btn-menu').setAttribute('aria-expanded', 'false');
+  hideDialog($('#drawer-mask'));
+}
 
 /* ---------- 设置面板 ---------- */
 function openSettings() {
-  $('#settings-mask').classList.remove('hidden');
+  $('#btn-settings').setAttribute('aria-expanded', 'true');
+  showDialog($('#settings-mask'), $('#settings-mask').querySelector('button'));
   const mirror = Store.pref.mirror || 'auto';
   for (const b of document.querySelectorAll('#mirror-seg button'))
     b.classList.toggle('active', b.dataset.mirror === mirror);
@@ -1043,7 +1153,10 @@ function openSettings() {
   for (const b of document.querySelectorAll('#depth-seg button'))
     b.classList.toggle('active', b.dataset.depth === depth);
 }
-function closeSettings() { $('#settings-mask').classList.add('hidden'); }
+function closeSettings() {
+  $('#btn-settings').setAttribute('aria-expanded', 'false');
+  hideDialog($('#settings-mask'));
+}
 
 /* ---------- 事件绑定 ---------- */
 function bind() {
@@ -1103,7 +1216,7 @@ function bind() {
     const b = e.target.closest('button[data-mirror]');
     if (!b) return;
     Store.setPref({ mirror: b.dataset.mirror });
-    Mirrors.active = null;
+    Mirrors.active = {};
     for (const x of document.querySelectorAll('#mirror-seg button'))
       x.classList.toggle('active', x === b);
     refreshCurrent();
@@ -1117,9 +1230,9 @@ function bind() {
     for (const x of document.querySelectorAll('#depth-seg button'))
       x.classList.toggle('active', x === b);
     updateBackfillButton();
-    // 深度调大 → 自动补拉新增区间；回填进行中则排队，结束后自动续跑
+    // 深度调大 → 重新读取更多 v2 日分片；加载进行中则排队。
     if (Number(b.dataset.depth) > prev) {
-      if (!syncBusy) backfill();
+      if (!syncBusy) refreshCurrent();
       else pendingBackfill = true;
     } else if (Number(b.dataset.depth) < prev) {
       pruneOldDays(); // 深度调小 → 立即按新窗口修剪
@@ -1133,7 +1246,7 @@ function bind() {
     DB.posts.clear(); DB.episodes.clear(); DB.blogs.clear(); DB.builderName.clear();
     // 同步重置视图与线路状态
     contentFilter = null; currentDayKey = null; pendingBackfill = false;
-    Mirrors.active = null; Mirrors.coolUntil = {};
+    Mirrors.active = {}; Mirrors.coolUntil = {};
     $('#backfill-progress').classList.add('hidden');
     document.body.classList.remove('filter-mode');
     closeSettings();
@@ -1155,6 +1268,7 @@ function bind() {
 
   // Esc 依次关闭阅读器 / 设置 / 侧边栏
   document.addEventListener('keydown', (e) => {
+    trapDialogFocus(e);
     if (e.key !== 'Escape') return;
     if (!$('#reader').classList.contains('hidden')) closeReader();
     else if (!$('#settings-mask').classList.contains('hidden')) closeSettings();

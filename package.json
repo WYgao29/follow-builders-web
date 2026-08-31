@@ -1,0 +1,7 @@
+{
+  "name": "follow-builders-web",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

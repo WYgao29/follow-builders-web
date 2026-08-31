@@ -33,6 +33,11 @@ body {
 button { font-family: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 
+:where(a, button, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 /* ---- 顶栏 ---- */
 .topbar {
   position: sticky; top: 0; z-index: 20;
@@ -334,31 +339,6 @@ body.filter-mode .day-head { top: calc(57px + var(--safe-top)); }
 }
 .lang-toggle:active { background: var(--accent-soft); }
 .rb-subhead { font-size: 14px; font-weight: 800; color: var(--accent); margin: 16px 0 6px; }
-
-/* ---- AI 摘要卡片 ---- */
-.summary-card {
-  background: var(--card); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: 14px; padding: 13px 15px; margin: 2px 0 12px;
-}
-.sum-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.sum-label { font-size: 13.5px; font-weight: 800; color: var(--accent); }
-.sum-actions { display: flex; gap: 6px; }
-.sum-btn {
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  background: transparent; color: var(--accent);
-  border-radius: 16px; padding: 3px 12px; font-size: 12px; font-weight: 700;
-}
-.sum-btn:disabled { opacity: .5; }
-.sum-body { font-size: 14px; }
-.sum-body .rb-para { font-size: 14px; margin: 8px 0; }
-.sum-hint { font-size: 13px; color: var(--ink-3); }
-.sum-err { font-size: 13px; color: var(--danger); }
-
-.sheet-input {
-  width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
-  border-radius: 10px; padding: 9px 12px; font-size: 14px; margin: 6px 0 2px;
-}
-.sheet-input:focus { outline: none; border-color: var(--accent); }
 
 /* ---- 分类筛选视图 ---- */
 .filter-head { padding: 6px 4px 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }

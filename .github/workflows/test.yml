@@ -1,0 +1,46 @@
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出网页仓
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: 检出数据仓用于跨仓契约测试
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: WYgao29/zaolangzhe-data
+          path: zaolangzhe-data
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: 运行单元与跨仓契约测试
+        run: npm test
+
+      - name: 启动本地网页
+        run: |
+          python3 -m http.server 8931 --bind 127.0.0.1 > "$RUNNER_TEMP/follow-builders-web.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/follow-builders-web.pid"
+
+      - name: 运行浏览器功能测试
+        run: node scripts/feature-test.js http://127.0.0.1:8931
+
+      - name: 停止本地网页
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/follow-builders-web.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/follow-builders-web.pid")" || true
+          fi
