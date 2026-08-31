@@ -13,11 +13,11 @@ const candidates = [
 ].filter(Boolean);
 const dataRoot = candidates.find(candidate => fs.existsSync(path.join(candidate, 'data', 'index.json')));
 
-test('web loader accepts every real v2 day shard without duplicate keys', { skip: dataRoot ? false : '未找到相邻 zaolangzhe-data；设置 ZAOLANGZHE_DATA_DIR 可启用' }, () => {
+test('web loader accepts every real v2/v3 day shard without duplicate keys', { skip: dataRoot ? false : '未找到相邻 zaolangzhe-data；设置 ZAOLANGZHE_DATA_DIR 可启用' }, () => {
   const index = Core.validateIndex(JSON.parse(fs.readFileSync(path.join(dataRoot, 'data', 'index.json'), 'utf8')));
   const globalKeys = new Set();
   for (const entry of index.days) {
-    const file = Core.validateDayFile(JSON.parse(fs.readFileSync(path.join(dataRoot, entry.path), 'utf8')), entry);
+    const file = Core.validateDayFile(JSON.parse(fs.readFileSync(path.join(dataRoot, entry.path), 'utf8')), entry, index.schemaVersion);
     for (const [kind, field] of [['x', 'id'], ['podcasts', 'guid'], ['blogs', 'url']]) {
       for (const item of file[kind]) {
         const key = `${kind}:${item[field]}`;

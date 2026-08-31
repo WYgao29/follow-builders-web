@@ -22,6 +22,33 @@ function index(days) {
   };
 }
 
+test('loader accepts matching v2 and v3 archives during cutover', () => {
+  for (const schemaVersion of [2, 3]) {
+    const file = { ...day('2026-08-30'), schemaVersion };
+    const archiveIndex = {
+      schemaVersion,
+      generatedAt: file.generatedAt,
+      days: [{
+        day: file.day,
+        path: `data/days/${file.day}.json`,
+        counts: { x: 1, podcasts: 0, blogs: 0 },
+      }],
+    };
+    assert.equal(Core.validateIndex(archiveIndex).schemaVersion, schemaVersion);
+    assert.equal(Core.validateDayFile(file, archiveIndex.days[0], schemaVersion).schemaVersion, schemaVersion);
+  }
+});
+
+test('loader rejects unsupported and mixed archive versions', () => {
+  assert.throws(
+    () => Core.validateIndex({ schemaVersion: 4, days: [] }),
+    /v2 或 v3/,
+  );
+  const file = { ...day('2026-08-30'), schemaVersion: 2 };
+  const entry = { day: file.day, counts: { x: 1, podcasts: 0, blogs: 0 } };
+  assert.throws(() => Core.validateDayFile(file, entry, 3), /版本不一致/);
+});
+
 test('safeURL only permits explicit HTTP and HTTPS URLs', () => {
   assert.equal(Core.safeURL('https://example.com/a'), 'https://example.com/a');
   assert.equal(Core.safeURL('http://example.com/a'), 'http://example.com/a');
