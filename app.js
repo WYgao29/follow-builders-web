@@ -877,7 +877,7 @@ function closeReader() {
   document.body.style.overflow = '';
 }
 
-/* 博客阅读器：中文总结 + 英文原文 */
+/* 博客阅读器：当前只显示英文；恢复总结开关后使用下方摘要分支。 */
 function openBlogReader(b) {
   openReader({
     kicker: '📄 ' + b.source,
