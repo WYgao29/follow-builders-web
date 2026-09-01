@@ -105,7 +105,7 @@ function trapDialogFocus(event) {
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v6', // v6：只展示 summaryZh，并兼容数据仓 v2/v3 日分片
+  KEY: 'fb.web.v6', // v6 缓存兼容数据仓 v2/v3；中文总结当前隐藏。
   data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
@@ -809,7 +809,7 @@ function tweetCard(p) {
   const summary = Core.visibleSummary(p);
   const card = el('div', 'tweet-card');
   if (summary) {
-    // 【AI 中文总结】+【英文原文】双段结构
+    // 恢复 AI 总结显示后：【中文总结】+【英文原文】双段结构。
     const brief = el('div', 'zh-brief');
     brief.appendChild(el('span', 'brief-tag', 'AI 简述'));
     brief.appendChild(document.createTextNode(summary));

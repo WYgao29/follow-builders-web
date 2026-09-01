@@ -73,6 +73,7 @@ test('stripLegacyTranslations returns a clean copy for v2 compatibility data', (
 test('visibleSummary hides stored AI summaries in English-only mode', () => {
   assert.equal(Core.visibleSummary({ summaryZh: '这条中文总结仍保留在数据中' }), '');
   assert.equal(Core.visibleSummary({}), '');
+  assert.equal(Core.visibleSummary({ summaryZh: '  恢复后可见  ' }, true), '恢复后可见');
 });
 
 test('mirror state keys include repository and mirror kind', () => {
