@@ -526,9 +526,10 @@ function openPodcastReader(e) {
       url: e.url || null,
       linkTitle: '收听 / 观看',
       build(body) {
-        if (e.summaryZh) {
+        const summary = Core.visibleSummary(e);
+        if (summary) {
           body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
-          renderBlogContent(body, e.summaryZh);
+          renderBlogContent(body, summary);
           body.appendChild(el('p', 'rb-subhead', '— 转录原文 —'));
         }
         const segs = parseTranscript(e.transcript);
@@ -805,7 +806,7 @@ function avatarEl(handle, name) {
 }
 
 function tweetCard(p) {
-  const summary = (p.summaryZh || '').trim();
+  const summary = Core.visibleSummary(p);
   const card = el('div', 'tweet-card');
   if (summary) {
     // 【AI 中文总结】+【英文原文】双段结构
@@ -886,9 +887,10 @@ function openBlogReader(b) {
     build(body) {
       body.appendChild(el('p', 'rb-meta',
         (b.publishedText || timeHM(b.ms)) + (b.author ? ' · ' + b.author : '')));
-      if (b.summaryZh) {
+      const summary = Core.visibleSummary(b);
+      if (summary) {
         body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
-        renderBlogContent(body, b.summaryZh);
+        renderBlogContent(body, summary);
         body.appendChild(el('p', 'rb-subhead', '— 英文原文 —'));
       } else if (b.summary) {
         body.appendChild(el('p', 'rb-para', b.summary));

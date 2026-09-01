@@ -36,6 +36,12 @@
     return clean;
   }
 
+  function visibleSummary(item) {
+    // 纯英文模式：保留数据中的 summaryZh，但暂停在页面上显示。
+    // return typeof item?.summaryZh === 'string' ? item.summaryZh.trim() : '';
+    return '';
+  }
+
   function mirrorKey(repo, kind) {
     return `${repo}|${kind}`;
   }
@@ -161,6 +167,7 @@
     UPSTREAM_PATHS,
     safeURL,
     stripLegacyTranslations,
+    visibleSummary,
     mirrorKey,
     buildSourceURL,
     mergeRichItem,

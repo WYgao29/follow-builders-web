@@ -198,20 +198,19 @@ async function main() {
   v = await evalJS(`({t: document.querySelector('.day-section .d-title').textContent, next: !document.querySelector('#btn-next-day').classList.contains('hidden')})`);
   check('T4 下一天按钮：切到昨天且按钮仍在', v && v.t === '昨天' && v.next, `title=${v && v.t}`);
 
-  // T5 每条 = 【真实 AI 简述】+【英文原文】双段结构，旧翻译永不展示
+  // T5 纯英文模式：数据中即使有总结，也只展示英文原文
   await evalJS(`document.querySelectorAll('#day-chips .chip')[0].click();`);
   await wait(300);
   v = await evalJS(`(() => {
-    const card = [...document.querySelectorAll('.tweet-card')].find(c => c.querySelector('.zh-brief'));
+    const card = [...document.querySelectorAll('.tweet-card')].find(c => c.textContent.includes('Day 0 tweet 0-0'));
     if (!card) return { found: false };
     return {
       found: true,
-      brief: card.querySelector('.zh-brief').textContent,
-      orig: card.querySelector('.tweet-orig').textContent,
+      text: card.querySelector('.tweet-text') && card.querySelector('.tweet-text').textContent,
       briefCount: document.querySelectorAll('.zh-brief').length,
     };
   })()`);
-  check('T5 真实总结 + 英文原文同卡展示', v && v.found && /AI 简述/.test(v.brief) && /真正总结·第0天·0/.test(v.brief) && !/不得显示/.test(v.brief) && /Day 0 tweet 0-0/.test(v.orig), JSON.stringify(v).slice(0, 160));
+  check('T5 只展示英文推文', v && v.found && /Day 0 tweet 0-0/.test(v.text) && v.briefCount === 0, JSON.stringify(v).slice(0, 160));
 
   v = await evalJS(`document.querySelector('#btn-lang')`);
   check('T5b 顶栏没有中英文切换按钮', v === null, String(v));
@@ -223,13 +222,13 @@ async function main() {
   const expectedCards = wk.kept * 6; // 窗口内每天 6 条种子推文
   check('T6 筛选 X 推文：窗口内推文全部展示', v && v.t === 'X 推文' && v.cards === expectedCards, `cards=${v && v.cards}, 预期=${expectedCards}`);
 
-  // T7 筛选播客：摘要块 + 转录
+  // T7 筛选播客：只显示英文转录
   await evalJS(`document.querySelector('[data-filter=podcasts]').click();`);
   await wait(300);
   await evalJS(`document.querySelector('.row-card.podcast').click();`);
   await wait(400);
   v = await evalJS(`({sub: [...document.querySelectorAll('#reader-body .rb-subhead')].map(x => x.textContent).join('|'), segs: document.querySelectorAll('.seg-item').length})`);
-  check('T7 播客阅读器：中文要点 + 转录原文同页', v && /要点摘要/.test(v.sub) && /转录原文/.test(v.sub) && v.segs === 2, JSON.stringify(v));
+  check('T7 播客阅读器：无中文要点且保留转录', v && !/要点摘要/.test(v.sub) && v.segs === 2, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
   // T8 筛选博客：始终显示英文标题
@@ -238,7 +237,7 @@ async function main() {
   v = await evalJS(`[...document.querySelectorAll('.row-card.blog .r-title')].map(x => x.textContent).join('|')`);
   check('T8 筛选博客：始终显示英文标题', /Post 2/.test(v || '') && /Post 4/.test(v || '') && !/不得显示/.test(v || ''), v);
 
-  // T9 博客阅读器：中文总结 + 英文原文，无翻译切换
+  // T9 博客阅读器：只显示英文原文
   await evalJS(`[...document.querySelectorAll('.row-card.blog')].find(r => r.textContent.includes('Post 2')).click();`);
   await wait(400);
   v = await evalJS(`(() => {
@@ -250,7 +249,7 @@ async function main() {
       toggle: !!body.querySelector('.lang-toggle'),
     };
   })()`);
-  check('T9 博客阅读器：总结 + 英文原文且无翻译切换', v && v.summary && v.original && !v.oldTranslation && !v.toggle, JSON.stringify(v));
+  check('T9 博客阅读器：只有英文原文且无翻译切换', v && !v.summary && v.original && !v.oldTranslation && !v.toggle, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
   // T10 返回时间线
@@ -261,13 +260,13 @@ async function main() {
   v = await evalJS(`document.querySelector('#app-title').textContent`);
   check('T10 返回时间线：标题恢复', v === '造浪者', v);
 
-  // T11 播客标题保持英文，摘要与英文转录同时显示
+  // T11 播客标题和转录保持英文，不显示中文摘要
   await evalJS(`document.querySelector('[data-filter=podcasts]').click();`);
   await wait(300);
   await evalJS(`document.querySelector('.row-card.podcast').click();`);
   await wait(400);
   v = await evalJS(`({hasZhSummary: document.querySelector('#reader-body').textContent.includes('要点摘要'), hasTranscript: document.querySelector('#reader-body').textContent.includes('Hello world'), enTitle: document.querySelector('#reader-title').textContent})`);
-  check('T11 播客阅读器：中文总结 + 英文标题和转录', v && v.hasZhSummary && v.hasTranscript && /Episode/.test(v.enTitle), JSON.stringify(v));
+  check('T11 播客阅读器：只有英文标题和转录', v && !v.hasZhSummary && v.hasTranscript && /Episode/.test(v.enTitle), JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
   await evalJS(`document.querySelector('[data-filter=x]').click();`);
   await wait(200);

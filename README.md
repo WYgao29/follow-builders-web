@@ -1,6 +1,6 @@
 # 造浪者（Follow Builders Web）
 
-「造浪者」是 [follow-builders](https://github.com/zarazhangrui/follow-builders) 的中文网页阅读器：每天看一眼正在构建 AI 产品的人。它优先读取 [zaolangzhe-data](https://github.com/WYgao29/zaolangzhe-data) 预加工的 v3 数据，纯静态、零运行时依赖、无需 API Key。
+「造浪者」是 [follow-builders](https://github.com/zarazhangrui/follow-builders) 的网页阅读器：每天看一眼正在构建 AI 产品的人。它优先读取 [zaolangzhe-data](https://github.com/WYgao29/zaolangzhe-data) 的 v3 英文原文归档，纯静态、零运行时依赖、无需 API Key。
 
 ## 运行
 
@@ -19,12 +19,12 @@ python3 -m http.server 8931
 
 最新中文分片必须成功并通过结构、计数和 URL 校验；较早分片失败时保留已成功加载的日期并明确提示。index 或最新分片不可用时，网页会整体降级到上游当前的三份完整快照；不会把缺少其中一种内容的 partial snapshot 当成成功。两层都失败时保留已有缓存并显示错误，且不会更新成功刷新时间。
 
-浏览器缓存键为 `fb.web.v6`。网页只把 `summaryZh` 显示为“AI 简述”，同时保留英文原文；从 v2 读取的旧翻译字段会在进入内存和缓存前删除。
+浏览器缓存键为 `fb.web.v6`。网页目前仅显示英文原文；数据中已有的 `summaryZh` 仍保留，但显示入口已暂停。从 v2 读取的旧翻译字段会在进入内存和缓存前删除。
 
 ## 功能
 
 - 单日时间线与最近 7/14/30 日切换
-- X 推文、播客和博客的中文总结 + 英文原文阅读
+- X 推文、播客和博客的英文原文阅读
 - GitHub 直连与 jsDelivr 自动切换，线路状态按仓库隔离
 - 内容分类筛选、深色模式、本地缓存与小时级静默刷新
 - 外链只允许 HTTP(S)，第三方内容只通过 `textContent` / DOM API 渲染
