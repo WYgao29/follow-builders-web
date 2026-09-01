@@ -105,7 +105,7 @@ function trapDialogFocus(event) {
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v6', // v6：只展示 summaryZh，并兼容数据仓 v2/v3 日分片
+  KEY: 'fb.web.v6', // v6 缓存兼容数据仓 v2/v3；中文总结当前隐藏。
   data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
@@ -526,9 +526,10 @@ function openPodcastReader(e) {
       url: e.url || null,
       linkTitle: '收听 / 观看',
       build(body) {
-        if (e.summaryZh) {
+        const summary = Core.visibleSummary(e);
+        if (summary) {
           body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
-          renderBlogContent(body, e.summaryZh);
+          renderBlogContent(body, summary);
           body.appendChild(el('p', 'rb-subhead', '— 转录原文 —'));
         }
         const segs = parseTranscript(e.transcript);
@@ -805,10 +806,10 @@ function avatarEl(handle, name) {
 }
 
 function tweetCard(p) {
-  const summary = (p.summaryZh || '').trim();
+  const summary = Core.visibleSummary(p);
   const card = el('div', 'tweet-card');
   if (summary) {
-    // 【AI 中文总结】+【英文原文】双段结构
+    // 恢复 AI 总结显示后：【中文总结】+【英文原文】双段结构。
     const brief = el('div', 'zh-brief');
     brief.appendChild(el('span', 'brief-tag', 'AI 简述'));
     brief.appendChild(document.createTextNode(summary));
@@ -876,7 +877,7 @@ function closeReader() {
   document.body.style.overflow = '';
 }
 
-/* 博客阅读器：中文总结 + 英文原文 */
+/* 博客阅读器：当前只显示英文；恢复总结开关后使用下方摘要分支。 */
 function openBlogReader(b) {
   openReader({
     kicker: '📄 ' + b.source,
@@ -886,9 +887,10 @@ function openBlogReader(b) {
     build(body) {
       body.appendChild(el('p', 'rb-meta',
         (b.publishedText || timeHM(b.ms)) + (b.author ? ' · ' + b.author : '')));
-      if (b.summaryZh) {
+      const summary = Core.visibleSummary(b);
+      if (summary) {
         body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
-        renderBlogContent(body, b.summaryZh);
+        renderBlogContent(body, summary);
         body.appendChild(el('p', 'rb-subhead', '— 英文原文 —'));
       } else if (b.summary) {
         body.appendChild(el('p', 'rb-para', b.summary));

@@ -20,7 +20,7 @@ test('app uses v6 storage and the v2/v3 primary/fallback loaders', () => {
   assert.doesNotMatch(source, /已回填 \$\{done\}\/\$\{total\}/);
 });
 
-test('app is summary-only with no language toggle', () => {
+test('app is English-only with no language toggle', () => {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.doesNotMatch(html, /id="btn-lang"/);

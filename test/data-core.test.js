@@ -70,6 +70,12 @@ test('stripLegacyTranslations returns a clean copy for v2 compatibility data', (
   assert.equal(source.textZh, '旧推文翻译');
 });
 
+test('visibleSummary hides stored AI summaries in English-only mode', () => {
+  assert.equal(Core.visibleSummary({ summaryZh: '这条中文总结仍保留在数据中' }), '');
+  assert.equal(Core.visibleSummary({}), '');
+  assert.equal(Core.visibleSummary({ summaryZh: '  恢复后可见  ' }, true), '恢复后可见');
+});
+
 test('mirror state keys include repository and mirror kind', () => {
   assert.equal(Core.mirrorKey('a/repo', 'github'), 'a/repo|github');
   assert.notEqual(Core.mirrorKey('a/repo', 'github'), Core.mirrorKey('b/repo', 'github'));

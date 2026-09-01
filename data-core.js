@@ -9,6 +9,7 @@
   const KINDS = ['x', 'podcasts', 'blogs'];
   const ARCHIVE_VERSIONS = new Set([2, 3]);
   const LEGACY_TRANSLATION_FIELDS = ['textZh', 'titleZh', 'contentZh', 'transcriptZh'];
+  const AI_SUMMARIES_VISIBLE = false;
   const UPSTREAM_PATHS = {
     x: 'feed-x.json',
     podcasts: 'feed-podcasts.json',
@@ -34,6 +35,11 @@
     const clean = { ...(item || {}) };
     for (const field of LEGACY_TRANSLATION_FIELDS) delete clean[field];
     return clean;
+  }
+
+  function visibleSummary(item, enabled = AI_SUMMARIES_VISIBLE) {
+    // 纯英文模式：保留数据中的 summaryZh，但暂停在页面上显示。
+    return enabled && typeof item?.summaryZh === 'string' ? item.summaryZh.trim() : '';
   }
 
   function mirrorKey(repo, kind) {
@@ -161,6 +167,7 @@
     UPSTREAM_PATHS,
     safeURL,
     stripLegacyTranslations,
+    visibleSummary,
     mirrorKey,
     buildSourceURL,
     mergeRichItem,
