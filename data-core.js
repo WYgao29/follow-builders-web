@@ -9,7 +9,7 @@
   const KINDS = ['x', 'podcasts', 'blogs'];
   const ARCHIVE_VERSIONS = new Set([2, 3]);
   const LEGACY_TRANSLATION_FIELDS = ['textZh', 'titleZh', 'contentZh', 'transcriptZh'];
-  const AI_SUMMARIES_VISIBLE = false;
+  const AI_SUMMARIES_VISIBLE = true;
   const UPSTREAM_PATHS = {
     x: 'feed-x.json',
     podcasts: 'feed-podcasts.json',
@@ -38,7 +38,7 @@
   }
 
   function visibleSummary(item, enabled = AI_SUMMARIES_VISIBLE) {
-    // 纯英文模式：保留数据中的 summaryZh，但暂停在页面上显示。
+    // AI_SUMMARIES_VISIBLE 控制三类内容的中文总结显示；置 false 可随时再次暂停。
     return enabled && typeof item?.summaryZh === 'string' ? item.summaryZh.trim() : '';
   }
 
@@ -60,6 +60,9 @@
   }
 
   function mergeRichItem(kind, older, newer) {
+    // 与数据仓 pipeline/contract.js 的 mergeDuplicate（richness 评分择优）策略不同：
+    // 这里新值优先、旧值补空缺。日分片键已由契约保证唯一，此函数只服务
+    // 缓存与上游兜底快照的跨源合并，恢复 summaryZh 显示时注意两端差异。
     itemKey(kind, older);
     itemKey(kind, newer);
     const merged = { ...older, ...newer };

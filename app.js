@@ -105,7 +105,7 @@ function trapDialogFocus(event) {
 
 /* ---------- 本地缓存 ---------- */
 const Store = {
-  KEY: 'fb.web.v6', // v6 缓存兼容数据仓 v2/v3；中文总结当前隐藏。
+  KEY: 'fb.web.v6', // v6 缓存兼容数据仓 v2/v3；中文总结显示已恢复。
   data: { posts: [], episodes: [], blogs: [], doneShas: [], lastRefresh: 0 },
 
   load() {
@@ -477,6 +477,20 @@ function updateMirrorStatus(text) {
   if (node) node.textContent = text;
 }
 
+/* 侧边栏分类计数跟随已加载数据更新；没有数据时只显示分类名，
+ * 不再写死数字（写死的"26 位构建者"会随上游名单变化过时） */
+function updateDrawerCounts() {
+  const stats = [
+    ['nav-count-x', DB.builderName.size, '位构建者'],
+    ['nav-count-podcasts', new Set([...DB.episodes.values()].map(e => e.show)).size, '档节目'],
+    ['nav-count-blogs', new Set([...DB.blogs.values()].map(b => b.source)).size, '个来源'],
+  ];
+  for (const [id, count, unit] of stats) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = count ? ` · ${count} ${unit}` : '';
+  }
+}
+
 /* ---------- 单日内容渲染（时间线与筛选视图共用） ---------- */
 function appendTweets(section, posts) {
   posts.sort((a, b) => b.ms - a.ms);
@@ -518,37 +532,34 @@ function appendEpisodes(section, episodes) {
 }
 
 function openPodcastReader(e) {
-  {
-    const kicker = '🎙 ' + e.show + ' · ' + timeHM(e.ms);
-    const title = e.title;
-    openReader({
-      kicker, title,
-      url: e.url || null,
-      linkTitle: '收听 / 观看',
-      build(body) {
-        const summary = Core.visibleSummary(e);
-        if (summary) {
-          body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
-          renderBlogContent(body, summary);
-          body.appendChild(el('p', 'rb-subhead', '— 转录原文 —'));
-        }
-        const segs = parseTranscript(e.transcript);
-        if (!segs) { body.appendChild(el('p', 'rb-para', e.transcript || '（无转录内容）')); return; }
-        body.appendChild(el('p', 'rb-meta', `转录共 ${segs.length} 段`));
-        for (const s of segs) {
-          const item = el('div', 'seg-item');
-          const chipRow = el('div', 'seg-chip-row');
-          chipRow.appendChild(el('span', 'seg-speaker', s.speaker));
-          chipRow.appendChild(el('span', 'seg-time', s.time));
-          item.appendChild(chipRow);
-          item.appendChild(el('div', 'seg-text', s.text));
-          body.appendChild(item);
-        }
-      },
-    });
-  }
+  const kicker = '🎙 ' + e.show + ' · ' + timeHM(e.ms);
+  const title = e.title;
+  openReader({
+    kicker, title,
+    url: e.url || null,
+    linkTitle: '收听 / 观看',
+    build(body) {
+      const summary = Core.visibleSummary(e);
+      if (summary) {
+        body.appendChild(el('p', 'rb-subhead', '✦ 要点摘要'));
+        renderBlogContent(body, summary);
+        body.appendChild(el('p', 'rb-subhead', '— 转录原文 —'));
+      }
+      const segs = parseTranscript(e.transcript);
+      if (!segs) { body.appendChild(el('p', 'rb-para', e.transcript || '（无转录内容）')); return; }
+      body.appendChild(el('p', 'rb-meta', `转录共 ${segs.length} 段`));
+      for (const s of segs) {
+        const item = el('div', 'seg-item');
+        const chipRow = el('div', 'seg-chip-row');
+        chipRow.appendChild(el('span', 'seg-speaker', s.speaker));
+        chipRow.appendChild(el('span', 'seg-time', s.time));
+        item.appendChild(chipRow);
+        item.appendChild(el('div', 'seg-text', s.text));
+        body.appendChild(item);
+      }
+    },
+  });
 }
-
 
 function appendBlogs(section, blogs) {
   blogs.sort((a, b) => b.ms - a.ms);
@@ -565,14 +576,8 @@ function appendBlogs(section, blogs) {
 }
 
 /* ---------- 批次新鲜度 ----------
- * 上游每天约北京时间 14:28（06:28 UTC）提交一次快照。
- * 用本地时钟算出"此刻应该已存在哪一天的批次"，与已加载的最新批次日对比，
- * 落后了就自动静默刷新——不依赖 cookies，也不需要额外的服务器时间接口。 */
-function expectedBatchDayLocal(now = new Date()) {
-  const snap = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 28, 0, 0));
-  const ref = now >= snap ? snap : new Date(snap.getTime() - 86400000);
-  return dayKey(ref.getTime());
-}
+ * 已有缓存时，超过 1 小时未刷新就静默拉一次最新数据（10 分钟内不重复检查）；
+ * 触发时机：回到前台、每 5 分钟的可见状态定时检查、以及 start() 启动时。 */
 
 /* ---------- 保留窗口（滑动窗口） ----------
  * depth 同时是保留窗口：出现更新的批次后，超出窗口的旧日期自动清除；
@@ -650,6 +655,7 @@ function render() {
   const timeline = $('#timeline');
   chips.textContent = '';
   timeline.textContent = '';
+  updateDrawerCounts();
 
   if (!keys.length) {
     $('#empty-state').classList.remove('hidden');
@@ -809,7 +815,7 @@ function tweetCard(p) {
   const summary = Core.visibleSummary(p);
   const card = el('div', 'tweet-card');
   if (summary) {
-    // 恢复 AI 总结显示后：【中文总结】+【英文原文】双段结构。
+    // 【AI 简述】+【英文原文】双段结构；无总结时只显示英文原文。
     const brief = el('div', 'zh-brief');
     brief.appendChild(el('span', 'brief-tag', 'AI 简述'));
     brief.appendChild(document.createTextNode(summary));
@@ -877,7 +883,7 @@ function closeReader() {
   document.body.style.overflow = '';
 }
 
-/* 博客阅读器：当前只显示英文；恢复总结开关后使用下方摘要分支。 */
+/* 博客阅读器：有 summaryZh 时显示中文摘要 + 英文原文。 */
 function openBlogReader(b) {
   openReader({
     kicker: '📄 ' + b.source,

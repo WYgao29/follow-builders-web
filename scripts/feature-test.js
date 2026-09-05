@@ -7,12 +7,28 @@
 const { execFile } = require('child_process');
 const fs = require('fs');
 const http = require('http');
+const path = require('path');
 
-const CHROME = process.env.CHROME_BIN || [
+const CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
-].find(candidate => fs.existsSync(candidate));
+];
+/* 可执行文件必须是绝对路径下真实存在的可执行普通文件——
+ * 拒绝相对路径与目录，防止 PATH/环境变量被注入任意程序 */
+function resolveChromeBinary() {
+  const candidates = process.env.CHROME_BIN ? [process.env.CHROME_BIN] : CHROME_CANDIDATES;
+  for (const candidate of candidates) {
+    try {
+      if (!path.isAbsolute(candidate)) continue;
+      fs.accessSync(candidate, fs.constants.X_OK);
+      if (!fs.statSync(candidate).isFile()) continue;
+      return candidate;
+    } catch (_) { /* 尝试下一个候选 */ }
+  }
+  return null;
+}
+const CHROME = resolveChromeBinary();
 const CDP_PORT = 9225;
 const BASE = process.argv[2] || 'http://127.0.0.1:8931';
 
@@ -198,19 +214,22 @@ async function main() {
   v = await evalJS(`({t: document.querySelector('.day-section .d-title').textContent, next: !document.querySelector('#btn-next-day').classList.contains('hidden')})`);
   check('T4 下一天按钮：切到昨天且按钮仍在', v && v.t === '昨天' && v.next, `title=${v && v.t}`);
 
-  // T5 纯英文模式：数据中即使有总结，也只展示英文原文
+  // T5 中文简述 + 英文原文并列展示（种子日 0 有 3 条带总结的推文）
   await evalJS(`document.querySelectorAll('#day-chips .chip')[0].click();`);
   await wait(300);
   v = await evalJS(`(() => {
     const card = [...document.querySelectorAll('.tweet-card')].find(c => c.textContent.includes('Day 0 tweet 0-0'));
     if (!card) return { found: false };
+    const brief = card.querySelector('.zh-brief');
+    const orig = card.querySelector('.tweet-orig');
     return {
       found: true,
-      text: card.querySelector('.tweet-text') && card.querySelector('.tweet-text').textContent,
+      brief: brief ? brief.textContent : '',
+      orig: orig ? orig.textContent : '',
       briefCount: document.querySelectorAll('.zh-brief').length,
     };
   })()`);
-  check('T5 只展示英文推文', v && v.found && /Day 0 tweet 0-0/.test(v.text) && v.briefCount === 0, JSON.stringify(v).slice(0, 160));
+  check('T5 中文简述 + 英文原文并列展示', v && v.found && v.brief.includes('真正总结·第0天·0') && v.orig.includes('Day 0 tweet 0-0') && !v.brief.includes('不得显示') && v.briefCount === 3, JSON.stringify(v).slice(0, 200));
 
   v = await evalJS(`document.querySelector('#btn-lang')`);
   check('T5b 顶栏没有中英文切换按钮', v === null, String(v));
@@ -228,7 +247,7 @@ async function main() {
   await evalJS(`document.querySelector('.row-card.podcast').click();`);
   await wait(400);
   v = await evalJS(`({sub: [...document.querySelectorAll('#reader-body .rb-subhead')].map(x => x.textContent).join('|'), segs: document.querySelectorAll('.seg-item').length})`);
-  check('T7 播客阅读器：无中文要点且保留转录', v && !/要点摘要/.test(v.sub) && v.segs === 2, JSON.stringify(v));
+  check('T7 播客阅读器：中文要点在前且保留转录', v && v.sub.includes('要点摘要') && !v.sub.includes('不得显示') && v.segs === 2, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
   // T8 筛选博客：始终显示英文标题
@@ -249,7 +268,7 @@ async function main() {
       toggle: !!body.querySelector('.lang-toggle'),
     };
   })()`);
-  check('T9 博客阅读器：只有英文原文且无翻译切换', v && !v.summary && v.original && !v.oldTranslation && !v.toggle, JSON.stringify(v));
+  check('T9 博客阅读器：中文摘要 + 英文原文，无翻译切换', v && v.summary && v.original && !v.oldTranslation && !v.toggle, JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
 
   // T10 返回时间线
@@ -266,7 +285,7 @@ async function main() {
   await evalJS(`document.querySelector('.row-card.podcast').click();`);
   await wait(400);
   v = await evalJS(`({hasZhSummary: document.querySelector('#reader-body').textContent.includes('要点摘要'), hasTranscript: document.querySelector('#reader-body').textContent.includes('Hello world'), enTitle: document.querySelector('#reader-title').textContent})`);
-  check('T11 播客阅读器：只有英文标题和转录', v && !v.hasZhSummary && v.hasTranscript && /Episode/.test(v.enTitle), JSON.stringify(v));
+  check('T11 播客阅读器：中文要点 + 英文转录标题', v && v.hasZhSummary && v.hasTranscript && /Episode/.test(v.enTitle), JSON.stringify(v));
   await evalJS(`document.querySelector('#reader-close').click();`);
   await evalJS(`document.querySelector('[data-filter=x]').click();`);
   await wait(200);
@@ -275,6 +294,17 @@ async function main() {
   // T12 无客户端 AI 残留
   v = await evalJS(`({callAI: typeof callAI !== 'undefined', AI_CONFIG: typeof AI_CONFIG !== 'undefined', genBtn: !!document.querySelector('.sum-btn')})`);
   check('T12 无客户端 AI 调用残留', v && v.callAI === false && v.AI_CONFIG === false && v.genBtn === false, JSON.stringify(v));
+
+  // T15 侧边栏分类计数与已加载数据一致（不允许写死数字过时）
+  await evalJS(`document.querySelector('#btn-menu').click();`);
+  await wait(300);
+  v = await evalJS(`(() => {
+    const get = (id) => { const n = document.getElementById(id); return n ? n.textContent : null; };
+    return { x: get('nav-count-x'), podcasts: get('nav-count-podcasts'), blogs: get('nav-count-blogs') };
+  })()`);
+  check('T15 侧边栏计数与数据一致', v && v.x === ' · 3 位构建者' && v.podcasts === ' · 1 档节目' && v.blogs === ' · 1 个来源', JSON.stringify(v));
+  await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`);
+  await wait(200);
 
   // T12b 清空缓存：确认数据立即清空（离线不验证后续自动重载，那需要网络）
   await evalJS(`window.__allowDataFetch = false;`);

@@ -12,6 +12,9 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
+/* handle 白名单：只允许 X 用户名的合法字符，杜绝 ../ 等路径穿越片段进入文件名 */
+const HANDLE_RE = /^[A-Za-z0-9_]{1,30}$/;
+
 const HANDLES = [
   'karpathy', 'swyx', 'bcherny', 'AmandaAskell', '_catwu', 'trq212',
   'sama', 'thsottiaux', 'joshwoodward', 'amasad', 'rauchg', 'alexalbert__',
@@ -48,7 +51,9 @@ async function main() {
 
   let ok = 0, skip = 0, fail = 0;
   for (const h of HANDLES) {
+    if (!HANDLE_RE.test(h)) throw new Error(`HANDLES 含非法 handle，拒绝写文件：${h}`);
     const outFile = path.join(outDir, h + '.png');
+    if (!outFile.startsWith(outDir + path.sep)) throw new Error(`输出路径越界，拒绝写文件：${h}`);
     if (fs.existsSync(outFile) && !force) { skip++; console.log(`↷ ${h}（已有本地文件）`); continue; }
     try {
       const res = await get(`https://unavatar.io/twitter/${encodeURIComponent(h)}?fallback=false`);

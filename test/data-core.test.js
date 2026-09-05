@@ -70,10 +70,11 @@ test('stripLegacyTranslations returns a clean copy for v2 compatibility data', (
   assert.equal(source.textZh, '旧推文翻译');
 });
 
-test('visibleSummary hides stored AI summaries in English-only mode', () => {
-  assert.equal(Core.visibleSummary({ summaryZh: '这条中文总结仍保留在数据中' }), '');
+test('visibleSummary shows stored AI summaries by default, with explicit off switch', () => {
+  assert.equal(Core.visibleSummary({ summaryZh: '中文总结恢复显示' }), '中文总结恢复显示');
   assert.equal(Core.visibleSummary({}), '');
-  assert.equal(Core.visibleSummary({ summaryZh: '  恢复后可见  ' }, true), '恢复后可见');
+  assert.equal(Core.visibleSummary({ summaryZh: '  去除首尾空白  ' }), '去除首尾空白');
+  assert.equal(Core.visibleSummary({ summaryZh: '内容' }, false), '');
 });
 
 test('mirror state keys include repository and mirror kind', () => {
